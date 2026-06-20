@@ -10,6 +10,7 @@ export type Surah = {
   revelationOrder: number | null;
   versesCount: number;
   bismillahPre: boolean;
+  startPage: number | null;
 };
 
 export type Ayah = {
@@ -19,6 +20,15 @@ export type Ayah = {
   verseKey: string;
   arabicText: string;
   transliteration: string | null;
+  pageNumber: number | null;
+};
+
+// An ayah enriched with its surah's name/number - used when a Mushaf page
+// spans more than one surah.
+export type PageAyah = Ayah & {
+  surahNumber: number;
+  surahNameArabic: string;
+  surahBismillahPre: boolean;
 };
 
 // Raw row shapes as returned by Supabase (snake_case columns)
@@ -32,6 +42,7 @@ type SurahRow = {
   revelation_order: number | null;
   verses_count: number;
   bismillah_pre: boolean;
+  start_page: number | null;
 };
 
 type AyahRow = {
@@ -41,7 +52,10 @@ type AyahRow = {
   verse_key: string;
   arabic_text: string;
   transliteration: string | null;
+  page_number: number | null;
 };
+
+export const TOTAL_MUSHAF_PAGES = 604;
 
 function mapSurah(row: SurahRow): Surah {
   return {
@@ -54,6 +68,7 @@ function mapSurah(row: SurahRow): Surah {
     revelationOrder: row.revelation_order,
     versesCount: row.verses_count,
     bismillahPre: row.bismillah_pre,
+    startPage: row.start_page,
   };
 }
 
@@ -65,6 +80,7 @@ function mapAyah(row: AyahRow): Ayah {
     verseKey: row.verse_key,
     arabicText: row.arabic_text,
     transliteration: row.transliteration,
+    pageNumber: row.page_number,
   };
 }
 
@@ -103,4 +119,23 @@ export async function fetchSurahWithAyahs(
     surah: mapSurah(surahRow),
     ayahs: (ayahRows ?? []).map(mapAyah),
   };
+}
+
+// Get every ayah that falls on a given Mushaf page (1-604), each tagged
+// with its surah name/number since a page can span two surahs.
+export async function fetchPageAyahs(pageNumber: number): Promise<PageAyah[]> {
+  const { data, error } = await supabase
+    .from("ayahs")
+    .select("*, surahs(number, name_arabic, bismillah_pre)")
+    .eq("page_number", pageNumber)
+    .order("id", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row: any) => ({
+    ...mapAyah(row),
+    surahNumber: row.surahs.number,
+    surahNameArabic: row.surahs.name_arabic,
+    surahBismillahPre: row.surahs.bismillah_pre,
+  }));
 }

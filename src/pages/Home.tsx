@@ -82,7 +82,7 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredSurahs?.map((surah) => (
-              <Link key={surah.id} to={`/surah/${surah.number}`}>
+              <Link key={surah.id} to={`/page/${surah.startPage ?? 1}`}>
                 <Card className="bg-emerald-900/30 border-emerald-800/40 hover:bg-emerald-800/40 hover:border-emerald-700/50 transition-all duration-300 cursor-pointer group">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
