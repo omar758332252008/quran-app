@@ -1,7 +1,12 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPageAyahs, TOTAL_MUSHAF_PAGES, type PageAyah } from "@/lib/quran";
+import {
+  fetchPageAyahs,
+  fetchPageLineLayout,
+  TOTAL_MUSHAF_PAGES,
+  type PageAyah,
+} from "@/lib/quran";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -101,6 +106,16 @@ export default function MushafPage() {
     queryFn: () => fetchPageAyahs(pageNumber),
   });
 
+  // Real printed line breaks for this Mushaf page. Best-effort: if the
+  // public API is unreachable, we fall back to one justified block per
+  // page instead of crashing the reader.
+  const { data: layout } = useQuery({
+    queryKey: ["page-layout", pageNumber],
+    queryFn: () => fetchPageLineLayout(pageNumber),
+    retry: 1,
+    staleTime: Infinity,
+  });
+
   const [recitationState, setRecitationState] = useState<RecitationState>("idle");
   const [statuses, setStatuses] = useState<WordStatus[]>([]);
   const [cursorWordIndex, setCursorWordIndex] = useState(0);
@@ -128,6 +143,37 @@ export default function MushafPage() {
     });
     return { pageWords: words, ayahRanges: ranges };
   }, [ayahs]);
+
+  // Flat per-word render tokens, each tagged with which line of the
+  // printed Mushaf page it falls on (line 0 = layout unavailable, meaning
+  // everything renders as one block like before).
+  const lineGroups = useMemo(() => {
+    type Token = { text: string; ayahIdx: number; isAyahEnd: boolean; line: number };
+    const list: Token[] = [];
+
+    (ayahs ?? []).forEach((ayah, ayahIdx) => {
+      const words = splitWords(ayah.arabicText);
+      const apiLines = layout?.wordLinesByVerseKey[ayah.verseKey];
+      // Only trust the fetched layout for this ayah if word counts line up
+      // exactly - otherwise a single mismatch would scramble the page.
+      const useApiLines = apiLines && apiLines.length === words.length;
+      words.forEach((text, wi) => {
+        list.push({
+          text,
+          ayahIdx,
+          isAyahEnd: wi === words.length - 1,
+          line: useApiLines ? apiLines![wi] : 0,
+        });
+      });
+    });
+
+    const groupsMap = new Map<number, Token[]>();
+    list.forEach((t) => {
+      if (!groupsMap.has(t.line)) groupsMap.set(t.line, []);
+      groupsMap.get(t.line)!.push(t);
+    });
+    return Array.from(groupsMap.entries()).sort((a, b) => a[0] - b[0]);
+  }, [ayahs, layout]);
 
   const resetTracking = useCallback(() => {
     setStatuses(pageWords.map(() => "upcoming"));
@@ -366,19 +412,37 @@ export default function MushafPage() {
           });
         })()}
 
-        <p
-          className="text-justify leading-loose text-2xl font-arabic text-emerald-950 dark:text-emerald-50"
-          style={{ wordSpacing: "0.15em" }}
-        >
-          {ayahs.map((ayah: PageAyah, idx: number) => (
-            <span key={ayah.id} className={statusClasses[ayahStatus(idx)]}>
-              {ayah.arabicText}
-              <span className="text-emerald-600 dark:text-emerald-400 mx-1">
-                ﴿{toArabicNumerals(ayah.ayahNumber)}﴾
-              </span>{" "}
-            </span>
+        <div className="space-y-0.5">
+          {lineGroups.map(([lineNum, lineTokens]) => (
+            <div
+              key={lineNum}
+              dir="rtl"
+              className="font-arabic text-lg sm:text-xl md:text-2xl leading-[2.1] text-emerald-950 dark:text-emerald-50"
+              style={{
+                textAlign: "justify",
+                // Without this, a browser won't stretch a line that it
+                // thinks is the "last line" of its block - and since each
+                // line here is its own block, every single one would
+                // otherwise render left/right-aligned instead of
+                // justified edge-to-edge like a real Mushaf line.
+                textAlignLast: "justify",
+                wordSpacing: "0.05em",
+              }}
+            >
+              {lineTokens.map((t, i) => (
+                <span key={i} className={statusClasses[ayahStatus(t.ayahIdx)]}>
+                  {t.text}
+                  {t.isAyahEnd && (
+                    <span className="text-emerald-600 dark:text-emerald-400 mx-1">
+                      {" "}﴿{toArabicNumerals(ayahs[t.ayahIdx].ayahNumber)}﴾
+                    </span>
+                  )}
+                  {!t.isAyahEnd && " "}
+                </span>
+              ))}
+            </div>
           ))}
-        </p>
+        </div>
       </div>
 
       {/* Bottom controls */}

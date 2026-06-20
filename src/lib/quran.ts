@@ -139,3 +139,41 @@ export async function fetchPageAyahs(pageNumber: number): Promise<PageAyah[]> {
     surahBismillahPre: row.surahs.bismillah_pre,
   }));
 }
+
+// --- Mushaf line layout -----------------------------------------------
+// The Madani Mushaf prints each of its 604 pages across a fixed number of
+// justified lines, and where a line breaks is part of what makes a page
+// visually recognizable. Our own ayah text doesn't carry that information,
+// so we pull it from the free public Quran.com API (no key required),
+// which tags every word of every ayah with the printed line number it
+// falls on for the standard 604-page Hafs Mushaf.
+export type PageLineLayout = {
+  totalLines: number;
+  // verseKey ("2:255") -> line number for each word of that ayah, in order
+  wordLinesByVerseKey: Record<string, number[]>;
+};
+
+export async function fetchPageLineLayout(pageNumber: number): Promise<PageLineLayout> {
+  const res = await fetch(
+    `https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=line_number&fields=text_uthmani`
+  );
+  if (!res.ok) throw new Error("فشل تحميل تخطيط أسطر الصفحة");
+
+  const json = await res.json();
+  const wordLinesByVerseKey: Record<string, number[]> = {};
+  let totalLines = 0;
+
+  for (const verse of json.verses ?? []) {
+    const lines: number[] = [];
+    for (const word of verse.words ?? []) {
+      // Skip the decorative end-of-ayah ornament glyph the API returns as
+      // a pseudo "word" - we render our own ayah-number marker instead.
+      if (word.char_type_name !== "word") continue;
+      lines.push(word.line_number);
+      if (word.line_number > totalLines) totalLines = word.line_number;
+    }
+    wordLinesByVerseKey[verse.verse_key] = lines;
+  }
+
+  return { totalLines, wordLinesByVerseKey };
+}
