@@ -100,11 +100,17 @@ function alignRecitation(pageWords: string[], recognizedWords: string[]): WordSt
 // uses), instead of the bracket ornament "﴿٥﴾".
 function AyahMarker({ number }: { number: number }) {
   return (
-    <span className="inline-block h-[1.05em] min-w-[1.05em] px-[0.18em] rounded-full border-[1.5px] border-emerald-600 dark:border-emerald-400 text-center text-[0.6em] leading-[1em] align-middle text-emerald-700 dark:text-emerald-300 mx-0.5">
+    <span className="inline-block h-[1.05em] min-w-[1.05em] px-[0.18em] rounded-full border-[1.5px] border-emerald-700 text-center text-[0.6em] leading-[1em] align-middle text-emerald-800 mx-0.5">
       {toArabicNumerals(number)}
     </span>
   );
 }
+
+// A subtle, randomly-grained paper texture (not a repeating pattern, so
+// it doesn't look synthetic/tiled) layered under the page text - this is
+// generated noise, not a copy of any real Mushaf's printed paper.
+const PAPER_NOISE_SVG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#n)' opacity='0.05'/></svg>`;
+const PAPER_TEXTURE = `url("data:image/svg+xml,${encodeURIComponent(PAPER_NOISE_SVG)}")`;
 
 export default function MushafPage() {
   const { pageNumber: pageParam } = useParams<{ pageNumber: string }>();
@@ -351,17 +357,18 @@ export default function MushafPage() {
 
   const statusClasses: Record<string, string> = {
     upcoming: "",
-    current: "bg-emerald-200/70 dark:bg-emerald-800/50 rounded px-0.5",
-    weak: "border-b-2 border-amber-500 dark:border-amber-400",
+    current: "bg-emerald-200/70 rounded px-0.5",
+    weak: "border-b-2 border-amber-500",
     good: "",
   };
 
-  const pageBg = "bg-[#f6efd8] dark:bg-[#16120a]";
+  const pageBg = "bg-gradient-to-b from-[#2b2419] to-[#15110a]";
+  const inkColor = "text-[#2c1d05]";
 
   if (isLoading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${pageBg}`}>
-        <p className="text-emerald-800 dark:text-emerald-300">جارٍ تحميل الصفحة...</p>
+        <p className="text-amber-100/80">جارٍ تحميل الصفحة...</p>
       </div>
     );
   }
@@ -369,7 +376,7 @@ export default function MushafPage() {
   if (pageError || pageAyahs.length === 0) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${pageBg}`}>
-        <p className="text-red-600">لم يتم العثور على بيانات هذه الصفحة.</p>
+        <p className="text-red-400">لم يتم العثور على بيانات هذه الصفحة.</p>
       </div>
     );
   }
@@ -398,73 +405,94 @@ export default function MushafPage() {
         </Button>
       </div>
 
-      {/* Mushaf page */}
-      <div className="px-5 sm:px-8 py-7 sm:py-10 max-w-2xl mx-auto">
-        {(() => {
-          let lastSurahNumber: number | null = null;
-          return pageAyahs.map((ayah, ayahIdx) => {
-            const surahInfo = surahByNumber.get(ayah.surahNumber);
-            const showSurahHeader = ayah.surahNumber !== lastSurahNumber;
-            const showBismillah =
-              showSurahHeader && surahInfo?.bismillahPre && ayah.ayahNumber === 1;
-            lastSurahNumber = ayah.surahNumber;
+      {/* Mushaf page - rendered as a physical paper page resting on a
+          dark surface, the way it'd look held open in your hands. */}
+      <div className="px-3 sm:px-6 py-7 sm:py-10">
+        <div className="relative max-w-2xl mx-auto">
+          {/* Bookmark ribbon tucked into the page */}
+          <div
+            className="absolute -top-2 right-10 sm:right-14 z-10 h-9 w-5 sm:h-11 sm:w-6 bg-emerald-700"
+            style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0% 100%)" }}
+          />
 
-            return (
-              <div key={`${ayah.verseKey}-${ayahIdx}`}>
-                {showSurahHeader && (
-                  <div className="-mx-5 sm:-mx-8 my-5 sm:my-6">
-                    <div className="bg-emerald-700 dark:bg-emerald-800 py-2.5 text-center">
-                      <span className="text-white font-bold text-lg sm:text-xl font-arabic tracking-wide">
-                        سورة {surahInfo?.nameArabic ?? ""}
-                      </span>
-                    </div>
+          <div
+            className="relative rounded-sm sm:rounded-md px-5 sm:px-9 py-8 sm:py-11"
+            style={{
+              backgroundColor: "#fbf3df",
+              backgroundImage: PAPER_TEXTURE,
+              boxShadow:
+                "0 1px 2px rgba(0,0,0,0.18), 0 14px 30px rgba(0,0,0,0.4), 0 36px 70px -25px rgba(0,0,0,0.55), inset 0 0 70px rgba(90,60,15,0.12), inset 0 0 3px rgba(0,0,0,0.25)",
+            }}
+          >
+            {(() => {
+              let lastSurahNumber: number | null = null;
+              return pageAyahs.map((ayah, ayahIdx) => {
+                const surahInfo = surahByNumber.get(ayah.surahNumber);
+                const showSurahHeader = ayah.surahNumber !== lastSurahNumber;
+                const showBismillah =
+                  showSurahHeader && surahInfo?.bismillahPre && ayah.ayahNumber === 1;
+                lastSurahNumber = ayah.surahNumber;
+
+                return (
+                  <div key={`${ayah.verseKey}-${ayahIdx}`}>
+                    {showSurahHeader && (
+                      <div className="-mx-5 sm:-mx-9 my-5 sm:my-6">
+                        <div className="bg-emerald-700 py-2.5 text-center">
+                          <span className="text-white font-bold text-lg sm:text-xl font-arabic tracking-wide">
+                            سورة {surahInfo?.nameArabic ?? ""}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {showBismillah && (
+                      <p className={`text-center font-arabic text-2xl ${inkColor} mb-4`}>{BISMILLAH}</p>
+                    )}
                   </div>
-                )}
-                {showBismillah && (
-                  <p className="text-center font-arabic text-2xl text-[#2c1d05] dark:text-[#f3e6c4] mb-4">
-                    {BISMILLAH}
-                  </p>
-                )}
-              </div>
-            );
-          });
-        })()}
+                );
+              });
+            })()}
 
-        <div className="space-y-0.5">
-          {lineGroups.map(([lineNum, lineTokens]) => (
-            <div
-              key={lineNum}
-              dir="rtl"
-              className="font-arabic text-lg sm:text-xl md:text-2xl leading-[2.1] text-[#2c1d05] dark:text-[#f3e6c4]"
-              style={{
-                textAlign: "justify",
-                // Without this, a browser won't stretch a line that it
-                // thinks is the "last line" of its block - and since
-                // each line here is its own block, every single one
-                // would otherwise render unjustified instead of
-                // edge-to-edge like a real Mushaf line.
-                textAlignLast: "justify",
-                wordSpacing: "0.05em",
-              }}
-            >
-              {lineTokens.map((t, i) => (
-                <span key={i} className={statusClasses[ayahStatus(t.ayahIdx)]}>
-                  {t.text}
-                  {t.isAyahEnd && <AyahMarker number={pageAyahs[t.ayahIdx].ayahNumber} />}
-                  {!t.isAyahEnd && " "}
-                </span>
+            <div className="space-y-0.5">
+              {lineGroups.map(([lineNum, lineTokens]) => (
+                <div
+                  key={lineNum}
+                  dir="rtl"
+                  className={`font-arabic text-lg sm:text-xl md:text-2xl leading-[2.1] ${inkColor}`}
+                  style={{
+                    textAlign: "justify",
+                    // Without this, a browser won't stretch a line that it
+                    // thinks is the "last line" of its block - and since
+                    // each line here is its own block, every single one
+                    // would otherwise render unjustified instead of
+                    // edge-to-edge like a real Mushaf line.
+                    textAlignLast: "justify",
+                    wordSpacing: "0.05em",
+                  }}
+                >
+                  {lineTokens.map((t, i) => (
+                    <span key={i} className={statusClasses[ayahStatus(t.ayahIdx)]}>
+                      {t.text}
+                      {t.isAyahEnd && <AyahMarker number={pageAyahs[t.ayahIdx].ayahNumber} />}
+                      {!t.isAyahEnd && " "}
+                    </span>
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
 
       {/* Bottom controls */}
-      <div className="fixed bottom-0 inset-x-0 bg-[#f6efd8] dark:bg-[#16120a] border-t border-emerald-700/20 dark:border-emerald-400/20 px-4 py-3">
+      <div
+        className="fixed bottom-0 inset-x-0 px-4 py-3 border-t border-amber-100/10"
+        style={{ backgroundColor: "rgba(20, 16, 10, 0.88)", backdropFilter: "blur(8px)" }}
+      >
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <Button
             variant="outline"
             size="icon"
+            className="border-amber-100/25 text-amber-100 hover:bg-white/10 hover:text-amber-50"
             onClick={() => goToPage(pageNumber + 1)}
             disabled={pageNumber >= TOTAL_MUSHAF_PAGES}
             title="الصفحة التالية"
@@ -494,6 +522,37 @@ export default function MushafPage() {
           <Button
             variant="outline"
             size="icon"
+            className="border-amber-100/25 text-amber-100 hover:bg-white/10 hover:text-amber-50"
+            onClick={() => goToPage(pageNumber + 1)}
+            disabled={pageNumber >= TOTAL_MUSHAF_PAGES}
+            title="الصفحة التالية"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+
+          <Button
+            className={
+              recitationState === "listening"
+                ? "flex-1 bg-red-600 hover:bg-red-700"
+                : "flex-1 bg-emerald-700 hover:bg-emerald-800"
+            }
+            onClick={toggleListening}
+          >
+            {recitationState === "listening" ? (
+              <>
+                <MicOff className="h-5 w-5 ml-2" /> إيقاف الاستماع
+              </>
+            ) : (
+              <>
+                <Mic className="h-5 w-5 ml-2" /> ابدأ القراءة
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="border-amber-100/25 text-amber-100 hover:bg-white/10 hover:text-amber-50"
             onClick={() => goToPage(pageNumber - 1)}
             disabled={pageNumber <= 1}
             title="الصفحة السابقة"
@@ -503,9 +562,9 @@ export default function MushafPage() {
         </div>
 
         {(recitationState === "listening" || recitationState === "completed") && (
-          <div className="max-w-2xl mx-auto mt-2 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
+          <div className="max-w-2xl mx-auto mt-2 flex items-center justify-between text-xs text-amber-100/80">
             <span>تقدّمك في الصفحة: {progressPercent}%</span>
-            <Badge variant="outline" className="border-amber-500 text-amber-800 dark:text-amber-300">
+            <Badge variant="outline" className="border-amber-400/60 text-amber-200">
               تحت الخط الأصفر = راجع الآية
             </Badge>
           </div>
