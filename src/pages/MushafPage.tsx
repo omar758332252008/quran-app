@@ -2,10 +2,9 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  fetchPageAyahs,
-  fetchPageLineLayout,
+  fetchMushafPage,
+  fetchSurahs,
   TOTAL_MUSHAF_PAGES,
-  type PageAyah,
 } from "@/lib/quran";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,25 +95,57 @@ function alignRecitation(pageWords: string[], recognizedWords: string[]): WordSt
   return statuses;
 }
 
+// A small original arabesque corner flourish, drawn from scratch with
+// basic shapes - decorative framing for the page, not a copy of any real
+// Mushaf print artwork.
+function CornerOrnament({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      className={`h-7 w-7 sm:h-9 sm:w-9 text-amber-700/70 dark:text-amber-400/60 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    >
+      <path d="M2 2 L2 14 Q2 2 14 2" />
+      <circle cx="2" cy="2" r="2.4" fill="currentColor" stroke="none" />
+      <path d="M6 2 Q16 2 16 12" />
+      <path d="M2 6 Q2 16 12 16" />
+      <circle cx="9" cy="9" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export default function MushafPage() {
   const { pageNumber: pageParam } = useParams<{ pageNumber: string }>();
   const navigate = useNavigate();
   const pageNumber = Math.min(Math.max(parseInt(pageParam || "1"), 1), TOTAL_MUSHAF_PAGES);
 
-  const { data: ayahs, isLoading } = useQuery({
-    queryKey: ["page", pageNumber],
-    queryFn: () => fetchPageAyahs(pageNumber),
+  // Word text AND printed-line numbers both come from the official
+  // Quran.com text_uthmani script in a single call, so the wording is
+  // accurate and guaranteed to line up with the real Mushaf's line breaks.
+  const { data: page, isLoading: pageLoading, isError: pageError } = useQuery({
+    queryKey: ["mushaf-page", pageNumber],
+    queryFn: () => fetchMushafPage(pageNumber),
+    retry: 1,
   });
 
-  // Real printed line breaks for this Mushaf page. Best-effort: if the
-  // public API is unreachable, we fall back to one justified block per
-  // page instead of crashing the reader.
-  const { data: layout } = useQuery({
-    queryKey: ["page-layout", pageNumber],
-    queryFn: () => fetchPageLineLayout(pageNumber),
-    retry: 1,
+  // Surah names/bismillah flags rarely change - fetch once and reuse for
+  // every page.
+  const { data: surahs, isLoading: surahsLoading } = useQuery({
+    queryKey: ["surahs"],
+    queryFn: fetchSurahs,
     staleTime: Infinity,
   });
+
+  const surahByNumber = useMemo(() => {
+    const map = new Map<number, { nameArabic: string; bismillahPre: boolean }>();
+    (surahs ?? []).forEach((s) => map.set(s.number, { nameArabic: s.nameArabic, bismillahPre: s.bismillahPre }));
+    return map;
+  }, [surahs]);
+
+  const isLoading = pageLoading || surahsLoading;
+  const pageAyahs = page?.ayahs ?? [];
 
   const [recitationState, setRecitationState] = useState<RecitationState>("idle");
   const [statuses, setStatuses] = useState<WordStatus[]>([]);
@@ -131,38 +162,32 @@ export default function MushafPage() {
   const manualStopRef = useRef(false);
 
   // Flat word list for the whole page, each tagged with the index of the
-  // ayah (within `ayahs`) it belongs to - this is what the alignment
+  // ayah (within `pageAyahs`) it belongs to - this is what the alignment
   // algorithm walks through.
   const { pageWords, ayahRanges } = useMemo(() => {
     const words: string[] = [];
     const ranges: { start: number; end: number }[] = [];
-    (ayahs ?? []).forEach((ayah) => {
+    pageAyahs.forEach((ayah) => {
       const start = words.length;
-      words.push(...splitWords(ayah.arabicText));
+      words.push(...ayah.words.map((w) => w.text));
       ranges.push({ start, end: words.length });
     });
     return { pageWords: words, ayahRanges: ranges };
-  }, [ayahs]);
+  }, [pageAyahs]);
 
-  // Flat per-word render tokens, each tagged with which line of the
-  // printed Mushaf page it falls on (line 0 = layout unavailable, meaning
-  // everything renders as one block like before).
+  // Group every word by the printed Mushaf line it falls on - text and
+  // line numbers come from the same API response, so they always match.
   const lineGroups = useMemo(() => {
     type Token = { text: string; ayahIdx: number; isAyahEnd: boolean; line: number };
     const list: Token[] = [];
 
-    (ayahs ?? []).forEach((ayah, ayahIdx) => {
-      const words = splitWords(ayah.arabicText);
-      const apiLines = layout?.wordLinesByVerseKey[ayah.verseKey];
-      // Only trust the fetched layout for this ayah if word counts line up
-      // exactly - otherwise a single mismatch would scramble the page.
-      const useApiLines = apiLines && apiLines.length === words.length;
-      words.forEach((text, wi) => {
+    pageAyahs.forEach((ayah, ayahIdx) => {
+      ayah.words.forEach((word, wi) => {
         list.push({
-          text,
+          text: word.text,
           ayahIdx,
-          isAyahEnd: wi === words.length - 1,
-          line: useApiLines ? apiLines![wi] : 0,
+          isAyahEnd: wi === ayah.words.length - 1,
+          line: word.line,
         });
       });
     });
@@ -173,7 +198,7 @@ export default function MushafPage() {
       groupsMap.get(t.line)!.push(t);
     });
     return Array.from(groupsMap.entries()).sort((a, b) => a[0] - b[0]);
-  }, [ayahs, layout]);
+  }, [pageAyahs]);
 
   const resetTracking = useCallback(() => {
     setStatuses(pageWords.map(() => "upcoming"));
@@ -337,21 +362,23 @@ export default function MushafPage() {
   const statusClasses: Record<string, string> = {
     upcoming: "",
     current: "bg-emerald-200/70 dark:bg-emerald-800/50 rounded px-0.5",
-    weak: "border-b-2 border-amber-400 dark:border-amber-500",
+    weak: "border-b-2 border-amber-500 dark:border-amber-400",
     good: "",
   };
 
+  const pageBg = "bg-gradient-to-b from-[#f6ecd3] to-[#eddfb8] dark:from-[#1c1509] dark:to-[#120d05]";
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-emerald-50 dark:bg-emerald-950">
-        <p className="text-emerald-700 dark:text-emerald-300">جارٍ تحميل الصفحة...</p>
+      <div className={`min-h-screen flex items-center justify-center ${pageBg}`}>
+        <p className="text-amber-800 dark:text-amber-200">جارٍ تحميل الصفحة...</p>
       </div>
     );
   }
 
-  if (!ayahs || ayahs.length === 0) {
+  if (pageError || pageAyahs.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-emerald-50 dark:bg-emerald-950">
+      <div className={`min-h-screen flex items-center justify-center ${pageBg}`}>
         <p className="text-red-600">لم يتم العثور على بيانات هذه الصفحة.</p>
       </div>
     );
@@ -361,11 +388,11 @@ export default function MushafPage() {
   const progressPercent = pageWords.length > 0 ? Math.round((matchedTotal / pageWords.length) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-emerald-50 dark:bg-emerald-950 pb-28" dir="rtl">
+    <div className={`min-h-screen ${pageBg} pb-28`} dir="rtl">
       {/* Top bar */}
-      <div className="sticky top-0 z-10 bg-emerald-700 text-white px-4 py-3 flex items-center justify-between shadow">
+      <div className="sticky top-0 z-10 bg-emerald-800 text-white px-4 py-3 flex items-center justify-between shadow border-b-2 border-amber-500/60">
         <Link to="/">
-          <Button size="icon" variant="ghost" className="text-white hover:bg-emerald-600">
+          <Button size="icon" variant="ghost" className="text-white hover:bg-emerald-700">
             <HomeIcon className="h-5 w-5" />
           </Button>
         </Link>
@@ -373,7 +400,7 @@ export default function MushafPage() {
         <Button
           size="icon"
           variant="ghost"
-          className="text-white hover:bg-emerald-600"
+          className="text-white hover:bg-emerald-700"
           onClick={resetTracking}
           title="إعادة الصفحة"
         >
@@ -381,72 +408,89 @@ export default function MushafPage() {
         </Button>
       </div>
 
-      {/* Mushaf text */}
-      <div className="max-w-2xl mx-auto px-5 py-8">
-        {(() => {
-          let lastSurahNumber: number | null = null;
-          return ayahs.map((ayah: PageAyah) => {
-            const showSurahHeader = ayah.surahNumber !== lastSurahNumber;
-            const showBismillah =
-              showSurahHeader && ayah.surahBismillahPre && ayah.ayahNumber === 1;
-            lastSurahNumber = ayah.surahNumber;
+      {/* Mushaf page card */}
+      <div className="px-3 sm:px-5 py-6 sm:py-10">
+        <div className="max-w-2xl mx-auto">
+          <div
+            className="relative rounded-xl sm:rounded-2xl border-[5px] sm:border-[6px] border-double border-amber-700/70 dark:border-amber-500/50 bg-[#fbf3df] dark:bg-[#241c0d] shadow-lg px-4 sm:px-9 py-8 sm:py-10"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(120,53,15,0.08) 1px, transparent 0)",
+              backgroundSize: "14px 14px",
+            }}
+          >
+            <CornerOrnament className="absolute top-2 right-2" />
+            <CornerOrnament className="absolute top-2 left-2 -scale-x-100" />
+            <CornerOrnament className="absolute bottom-2 right-2 -scale-y-100" />
+            <CornerOrnament className="absolute bottom-2 left-2 -scale-x-100 -scale-y-100" />
 
-            return (
-              <div key={ayah.id}>
-                {showSurahHeader && (
-                  <div className="text-center my-6">
-                    <div className="inline-block border-2 border-emerald-600 rounded-lg px-6 py-2 bg-emerald-100 dark:bg-emerald-900">
-                      <span className="text-emerald-800 dark:text-emerald-200 font-bold text-lg">
-                        سورة {ayah.surahNameArabic}
-                      </span>
-                    </div>
+            {(() => {
+              let lastSurahNumber: number | null = null;
+              return pageAyahs.map((ayah, ayahIdx) => {
+                const surahInfo = surahByNumber.get(ayah.surahNumber);
+                const showSurahHeader = ayah.surahNumber !== lastSurahNumber;
+                const showBismillah =
+                  showSurahHeader && surahInfo?.bismillahPre && ayah.ayahNumber === 1;
+                lastSurahNumber = ayah.surahNumber;
+
+                return (
+                  <div key={`${ayah.verseKey}-${ayahIdx}`}>
+                    {showSurahHeader && (
+                      <div className="text-center my-5 sm:my-6">
+                        <div className="inline-block border-y-2 border-amber-700/70 dark:border-amber-500/60 px-8 py-2">
+                          <span className="text-amber-900 dark:text-amber-200 font-bold text-lg font-arabic">
+                            سورة {surahInfo?.nameArabic ?? ""}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {showBismillah && (
+                      <p className="text-center font-arabic text-2xl text-amber-900 dark:text-amber-200 mb-4">
+                        {BISMILLAH}
+                      </p>
+                    )}
                   </div>
-                )}
-                {showBismillah && (
-                  <p className="text-center font-arabic text-2xl text-emerald-800 dark:text-emerald-200 mb-4">
-                    {BISMILLAH}
-                  </p>
-                )}
-              </div>
-            );
-          });
-        })()}
+                );
+              });
+            })()}
 
-        <div className="space-y-0.5">
-          {lineGroups.map(([lineNum, lineTokens]) => (
-            <div
-              key={lineNum}
-              dir="rtl"
-              className="font-arabic text-lg sm:text-xl md:text-2xl leading-[2.1] text-emerald-950 dark:text-emerald-50"
-              style={{
-                textAlign: "justify",
-                // Without this, a browser won't stretch a line that it
-                // thinks is the "last line" of its block - and since each
-                // line here is its own block, every single one would
-                // otherwise render left/right-aligned instead of
-                // justified edge-to-edge like a real Mushaf line.
-                textAlignLast: "justify",
-                wordSpacing: "0.05em",
-              }}
-            >
-              {lineTokens.map((t, i) => (
-                <span key={i} className={statusClasses[ayahStatus(t.ayahIdx)]}>
-                  {t.text}
-                  {t.isAyahEnd && (
-                    <span className="text-emerald-600 dark:text-emerald-400 mx-1">
-                      {" "}﴿{toArabicNumerals(ayahs[t.ayahIdx].ayahNumber)}﴾
+            <div className="space-y-0.5">
+              {lineGroups.map(([lineNum, lineTokens]) => (
+                <div
+                  key={lineNum}
+                  dir="rtl"
+                  className="font-arabic text-lg sm:text-xl md:text-2xl leading-[2.1] text-[#2c1d05] dark:text-[#f3e6c4]"
+                  style={{
+                    textAlign: "justify",
+                    // Without this, a browser won't stretch a line that it
+                    // thinks is the "last line" of its block - and since
+                    // each line here is its own block, every single one
+                    // would otherwise render unjustified instead of
+                    // edge-to-edge like a real Mushaf line.
+                    textAlignLast: "justify",
+                    wordSpacing: "0.05em",
+                  }}
+                >
+                  {lineTokens.map((t, i) => (
+                    <span key={i} className={statusClasses[ayahStatus(t.ayahIdx)]}>
+                      {t.text}
+                      {t.isAyahEnd && (
+                        <span className="text-emerald-700 dark:text-emerald-400 mx-1">
+                          {" "}﴿{toArabicNumerals(pageAyahs[t.ayahIdx].ayahNumber)}﴾
+                        </span>
+                      )}
+                      {!t.isAyahEnd && " "}
                     </span>
-                  )}
-                  {!t.isAyahEnd && " "}
-                </span>
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
 
       {/* Bottom controls */}
-      <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-emerald-900 border-t border-emerald-200 dark:border-emerald-800 px-4 py-3">
+      <div className="fixed bottom-0 inset-x-0 bg-[#fbf3df] dark:bg-[#241c0d] border-t-2 border-amber-700/40 dark:border-amber-500/30 px-4 py-3">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <Button
             variant="outline"
@@ -462,7 +506,7 @@ export default function MushafPage() {
             className={
               recitationState === "listening"
                 ? "flex-1 bg-red-600 hover:bg-red-700"
-                : "flex-1 bg-emerald-600 hover:bg-emerald-700"
+                : "flex-1 bg-emerald-700 hover:bg-emerald-800"
             }
             onClick={toggleListening}
           >
@@ -489,9 +533,9 @@ export default function MushafPage() {
         </div>
 
         {(recitationState === "listening" || recitationState === "completed") && (
-          <div className="max-w-2xl mx-auto mt-2 flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300">
+          <div className="max-w-2xl mx-auto mt-2 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
             <span>تقدّمك في الصفحة: {progressPercent}%</span>
-            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+            <Badge variant="outline" className="border-amber-500 text-amber-800 dark:text-amber-300">
               تحت الخط الأصفر = راجع الآية
             </Badge>
           </div>
