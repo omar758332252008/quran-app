@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "KFGQPC Hafs Uthmanic";
+  src: url("https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.woff2")
+      format("woff2"),
+    url("https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.ttf")
+      format("truetype");
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

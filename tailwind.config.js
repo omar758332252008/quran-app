@@ -5,7 +5,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        arabic: ["Amiri Quran", "Traditional Arabic", "serif"],
+        arabic: ["KFGQPC Hafs Uthmanic", "Amiri Quran", "Traditional Arabic", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
