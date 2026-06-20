@@ -147,6 +147,11 @@ export async function fetchPageAyahs(pageNumber: number): Promise<PageAyah[]> {
 // unlike pulling text from one source and layout from another.
 export type MushafWord = {
   text: string;
+  // The true print glyph code for this word in the QPC V1 font (one
+  // specific font file per Mushaf page). When present, this is what makes
+  // the page look exactly like a real, physical Mushaf - not an
+  // approximation rendered in a generic Unicode font.
+  codeV1?: string;
   line: number;
 };
 
@@ -164,7 +169,7 @@ export type MushafPageData = {
 
 export async function fetchMushafPage(pageNumber: number): Promise<MushafPageData> {
   const res = await fetch(
-    `https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=line_number,text_uthmani&fields=text_uthmani`
+    `https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=line_number,text_uthmani,code_v1&fields=text_uthmani`
   );
   if (!res.ok) throw new Error("فشل تحميل نص الصفحة");
 
@@ -177,7 +182,11 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
       .filter((w: any) => w.char_type_name === "word")
       .map((w: any) => {
         if (w.line_number > totalLines) totalLines = w.line_number;
-        return { text: w.text_uthmani as string, line: w.line_number as number };
+        return {
+          text: w.text_uthmani as string,
+          codeV1: (w.code_v1 as string | undefined) || undefined,
+          line: w.line_number as number,
+        };
       });
 
     return {
@@ -189,4 +198,34 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
   });
 
   return { totalLines, ayahs };
+}
+
+// --- Per-page glyph font loading ----------------------------------------
+// Each of the 604 Mushaf pages has its own font file (the standard QPC V1
+// font set, officially published by Quran Foundation for exactly this
+// purpose). We only ever load the current page's font plus its
+// neighbours, never all 604 at once.
+const loadedMushafFonts = new Set<number>();
+
+export function mushafPageFontFamily(page: number): string {
+  return `mushaf-p${page}`;
+}
+
+export function ensureMushafPageFont(page: number, isCurrent: boolean): void {
+  if (page < 1 || page > TOTAL_MUSHAF_PAGES || loadedMushafFonts.has(page)) return;
+  loadedMushafFonts.add(page);
+
+  const family = mushafPageFontFamily(page);
+  const base = "https://verses.quran.foundation/fonts/quran/hafs/v1";
+  const style = document.createElement("style");
+  style.setAttribute("data-mushaf-font", String(page));
+  style.textContent = `
+    @font-face {
+      font-family: "${family}";
+      src: url("${base}/woff2/p${page}.woff2") format("woff2"),
+           url("${base}/woff/p${page}.woff") format("woff");
+      font-display: ${isCurrent ? "block" : "swap"};
+    }
+  `;
+  document.head.appendChild(style);
 }
