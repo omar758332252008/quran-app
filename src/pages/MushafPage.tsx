@@ -108,6 +108,11 @@ export default function MushafPage() {
   const recognitionRef = useRef<any>(null);
   const recitationStateRef = useRef<RecitationState>("idle");
   const finalTranscriptRef = useRef("");
+  // Index of the last speech-recognition result we've already folded into
+  // finalTranscriptRef. Some Android browsers don't honor event.resultIndex
+  // reliably and resend already-finalized results on every event - without
+  // this guard, that would get the same words appended again and again.
+  const lastProcessedIndexRef = useRef(-1);
   const manualStopRef = useRef(false);
 
   // Flat word list for the whole page, each tagged with the index of the
@@ -128,6 +133,7 @@ export default function MushafPage() {
     setStatuses(pageWords.map(() => "upcoming"));
     setCursorWordIndex(0);
     finalTranscriptRef.current = "";
+    lastProcessedIndexRef.current = -1;
   }, [pageWords]);
 
   useEffect(() => {
@@ -173,13 +179,26 @@ export default function MushafPage() {
     recitationStateRef.current = "listening";
 
     recognition.onresult = (event: any) => {
+      // If the results array shrank or restarted (some Android browsers
+      // do this mid-session without firing onend), our progress marker
+      // would be stale - treat it as a fresh sub-session.
+      if (event.results.length <= lastProcessedIndexRef.current) {
+        lastProcessedIndexRef.current = -1;
+      }
+
       let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscriptRef.current += text + " ";
-        } else {
-          interim += text;
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0].transcript;
+        if (result.isFinal) {
+          if (i > lastProcessedIndexRef.current) {
+            finalTranscriptRef.current += text + " ";
+            lastProcessedIndexRef.current = i;
+          }
+          // else: this final result was already folded in - skip it so
+          // the same words don't get appended twice.
+        } else if (i === event.results.length - 1) {
+          interim = text;
         }
       }
       runAlignment(finalTranscriptRef.current + interim);
