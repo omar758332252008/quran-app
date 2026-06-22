@@ -158,7 +158,10 @@
 
     <!-- LIST TAB -->
     <section class="tab" id="tab-list">
-      <div id="listCount" class="count-pill">0 كلمة محفوظة</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <div id="listCount" class="count-pill">0 كلمة محفوظة</div>
+        <button class="icon-btn del" id="clearAllBtn" title="مسح كل الكلمات" style="width:auto; border-radius:10px; padding:0 12px; font-size:12.5px;">🗑️ مسح الكل</button>
+      </div>
       <div id="listContainer"></div>
     </section>
 
@@ -405,6 +408,14 @@ function deleteWord(id){
   saveWords();
   renderList();
 }
+function clearAllWords(){
+  if(words.length===0) return;
+  const ok = confirm('هتمسح كل الـ' + words.length + ' كلمة محفوظة، الخطوة دي مايتراجع فيهاش. متأكد؟');
+  if(!ok) return;
+  words = [];
+  saveWords();
+  renderList();
+}
 
 /* ---------- List rendering ---------- */
 function renderList(){
@@ -570,6 +581,7 @@ function bindEvents(){
   document.getElementById('quizNoBtn').addEventListener('click', function(){ quizAnswer(false); });
   document.getElementById('quizYesBtn').addEventListener('click', function(){ quizAnswer(true); });
   document.getElementById('quizShuffleBtn').addEventListener('click', startQuiz);
+  document.getElementById('clearAllBtn').addEventListener('click', clearAllWords);
 
   document.querySelectorAll('.nav-btn').forEach(function(btn){
     btn.addEventListener('click', function(){ switchTab(btn.dataset.tab); });
