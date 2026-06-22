@@ -22,7 +22,7 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0; background:var(--bg-deep); color:var(--text); font-family:'Tajawal',sans-serif; height:100%; overflow:hidden;}
   .fr{font-family:'Poppins',sans-serif; direction:ltr; unicode-bidi:plaintext;}
-  #app{display:flex; flex-direction:column; height:100vh; max-width:560px; margin:0 auto; position:relative;}
+  #app{display:flex; flex-direction:column; height:100vh; height:100dvh; max-width:560px; margin:0 auto; position:relative;}
 
   /* ===== Header ===== */
   header{padding:18px 20px 14px; flex-shrink:0; position:relative; overflow:hidden;}
@@ -127,7 +127,7 @@
 <div id="app">
 
   <header>
-    <button id="backBtn" class="icon-btn" style="display:none; position:absolute; left:14px; top:16px; background:var(--bg-card-2);" onclick="goBack()">➡️</button>
+    <button id="backBtn" class="icon-btn" style="display:none; position:absolute; left:14px; top:16px; background:var(--bg-card-2);">➡️</button>
     <h1>هتحفظ <span>فرنساوي</span> 🇫🇷</h1>
     <p>امتحان بكره؟ يلا نحفظ كلمة كلمة</p>
   </header>
@@ -140,18 +140,18 @@
       <input type="text" id="inputFr" class="fr-input" placeholder="bonjour">
       <label>المعنى بالعربي</label>
       <input type="text" id="inputAr" placeholder="صباح الخير">
-      <button class="btn" onclick="addSingleWord()">➕ ضيف الكلمة</button>
+      <button class="btn" id="addWordBtn">➕ ضيف الكلمة</button>
       <div class="hint" id="addHint"></div>
 
       <div class="divider">أو استورد كذا كلمة مرة واحدة</div>
       <label>كل كلمة في سطر، بالشكل ده: <span class="fr">bonjour - صباح الخير</span></label>
       <textarea id="bulkInput" placeholder="bonjour - صباح الخير&#10;merci - شكراً&#10;au revoir - مع السلامة"></textarea>
-      <button class="btn secondary" onclick="bulkImport()">📥 استورد الكل</button>
+      <button class="btn secondary" id="bulkImportBtn">📥 استورد الكل</button>
       <div class="hint" id="bulkHint">ممكن تفصل الكلمة عن المعنى بـ "-" أو ":" أو فاصلة. كل سطر = كلمة واحدة.</div>
 
       <div class="divider">أو رفع ملف txt</div>
-      <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none" onchange="handleFileUpload(event)">
-      <button class="btn secondary" onclick="document.getElementById('fileInput').click()">📂 اختار ملف txt</button>
+      <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none">
+      <button class="btn secondary" id="pickFileBtn">📂 اختار ملف txt</button>
       <div class="hint" id="fileNameHint"></div>
       <div class="hint">الملف لازم يكون كل سطر فيه كلمة بالشكل: <span class="fr">bonjour - صباح الخير</span></div>
     </section>
@@ -168,12 +168,12 @@
         <div class="placeholder">دوس "ابدأ" وهسمعك كل الكلمات بالفرنساوي وبعدها بالعربي 🎧</div>
       </div>
       <div class="controls-row">
-        <button class="btn" id="memPlayBtn" onclick="toggleMemPlay()">▶️ ابدأ الحفظ</button>
-        <button class="btn secondary" onclick="stopMem()" style="max-width:90px;">⏹️ وقف</button>
+        <button class="btn" id="memPlayBtn">▶️ ابدأ الحفظ</button>
+        <button class="btn secondary" id="memStopBtn" style="max-width:90px;">⏹️ وقف</button>
       </div>
       <div class="toggle-row">
         <span>كرر تاني لما يخلص</span>
-        <div class="switch" id="loopSwitch" onclick="toggleLoop()"></div>
+        <div class="switch" id="loopSwitch"></div>
       </div>
     </section>
 
@@ -181,27 +181,27 @@
     <section class="tab" id="tab-quiz">
       <div class="quiz-meta">
         <span id="quizProgress">0 / 0</span>
-        <span id="quizDirBtn" onclick="toggleQuizDirection()" style="cursor:pointer; color:var(--violet-soft);">🔁 فرنساوي → عربي</span>
+        <span id="quizDirBtn" style="cursor:pointer; color:var(--violet-soft);">🔁 فرنساوي → عربي</span>
       </div>
-      <div class="flashcard" id="flashcard" onclick="flipCard()">
+      <div class="flashcard" id="flashcard">
         <span class="sub" id="flashSub">دوس عشان تقلب الكارت</span>
         <div class="face" id="flashFace">ضيف كلمات الأول</div>
         <span class="flip-hint">👆 اقلب</span>
       </div>
       <div class="quiz-buttons">
-        <button class="btn dontknow" onclick="quizAnswer(false)">😵 مش متذكر</button>
-        <button class="btn know" onclick="quizAnswer(true)">✅ عارفها</button>
+        <button class="btn dontknow" id="quizNoBtn">😵 مش متذكر</button>
+        <button class="btn know" id="quizYesBtn">✅ عارفها</button>
       </div>
-      <button class="btn secondary" onclick="startQuiz()">🔀 خلط الكلمات من جديد</button>
+      <button class="btn secondary" id="quizShuffleBtn">🔀 خلط الكلمات من جديد</button>
     </section>
 
   </main>
 
   <nav>
-    <button class="nav-btn active" data-tab="add" onclick="switchTab('add')"><span class="ic">➕</span>إضافة</button>
-    <button class="nav-btn" data-tab="list" onclick="switchTab('list')"><span class="ic">📋</span>كلماتي</button>
-    <button class="nav-btn" data-tab="memorize" onclick="switchTab('memorize')"><span class="ic">🎧</span>حفظ</button>
-    <button class="nav-btn" data-tab="quiz" onclick="switchTab('quiz')"><span class="ic">🃏</span>اختبار</button>
+    <button class="nav-btn active" data-tab="add"><span class="ic">➕</span>إضافة</button>
+    <button class="nav-btn" data-tab="list"><span class="ic">📋</span>كلماتي</button>
+    <button class="nav-btn" data-tab="memorize"><span class="ic">🎧</span>حفظ</button>
+    <button class="nav-btn" data-tab="quiz"><span class="ic">🃏</span>اختبار</button>
   </nav>
 
 </div>
@@ -417,18 +417,17 @@ function renderList(){
   container.innerHTML = words.map(w=>`
     <div class="card">
       <div class="card-actions">
-        <button class="icon-btn" onclick="speakBoth('${escAttr(w.fr)}','${escAttr(w.ar)}')">🔊</button>
+        <button class="icon-btn" data-action="speak" data-id="${w.id}">🔊</button>
       </div>
       <div class="txt">
         <div class="fr">${esc(w.fr)}</div>
         <div class="ar">${esc(w.ar)}</div>
       </div>
-      <button class="icon-btn del" onclick="deleteWord(${w.id})">🗑️</button>
+      <button class="icon-btn del" data-action="delete" data-id="${w.id}">🗑️</button>
     </div>
   `).join('');
 }
 function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
 /* ---------- Memorize mode ---------- */
 function toggleLoop(){
@@ -549,7 +548,47 @@ function quizAnswer(knew){
   renderQuizCard();
 }
 
+/* ---------- Event binding (JS-side, not inline onclick) ----------
+   Some mobile carriers run compression/optimization proxies that can
+   strip inline onclick="" attributes from HTML on the way to the phone.
+   Binding everything here instead is immune to that. */
+function bindEvents(){
+  document.getElementById('backBtn').addEventListener('click', goBack);
+  document.getElementById('addWordBtn').addEventListener('click', addSingleWord);
+  document.getElementById('bulkImportBtn').addEventListener('click', bulkImport);
+  document.getElementById('pickFileBtn').addEventListener('click', function(){
+    document.getElementById('fileInput').click();
+  });
+  document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+  document.getElementById('memPlayBtn').addEventListener('click', toggleMemPlay);
+  document.getElementById('memStopBtn').addEventListener('click', stopMem);
+  document.getElementById('loopSwitch').addEventListener('click', toggleLoop);
+
+  document.getElementById('quizDirBtn').addEventListener('click', toggleQuizDirection);
+  document.getElementById('flashcard').addEventListener('click', flipCard);
+  document.getElementById('quizNoBtn').addEventListener('click', function(){ quizAnswer(false); });
+  document.getElementById('quizYesBtn').addEventListener('click', function(){ quizAnswer(true); });
+  document.getElementById('quizShuffleBtn').addEventListener('click', startQuiz);
+
+  document.querySelectorAll('.nav-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){ switchTab(btn.dataset.tab); });
+  });
+
+  // Word cards are re-rendered often, so this listens on the container
+  // once and works for every card past or future (event delegation).
+  document.getElementById('listContainer').addEventListener('click', function(e){
+    const btn = e.target.closest('button[data-action]');
+    if(!btn) return;
+    const word = words.find(w => String(w.id) === btn.dataset.id);
+    if(!word) return;
+    if(btn.dataset.action === 'speak') speakBoth(word.fr, word.ar);
+    if(btn.dataset.action === 'delete') deleteWord(word.id);
+  });
+}
+
 /* ---------- Init ---------- */
+bindEvents();
 loadWords();
 switchTab('add');
 </script>
