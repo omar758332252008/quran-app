@@ -321,11 +321,24 @@ async function speak(text, lang, rate=0.92){
     const voices = speechSynthesis.getVoices();
     const base = lang.split('-')[0];
     const candidates = voices.filter(v=>v.lang===lang || (v.lang && v.lang.toLowerCase().startsWith(base)));
+    if(candidates.length===0){
+      const langName = base==='ar' ? 'العربي' : (base==='fr' ? 'الفرنساوي' : base);
+      showDebugError(
+        'مفيش صوت ' + langName + ' متاح على جهازك دلوقتي، فمش هيتنطق. ' +
+        'علشان تظبطه: روح إعدادات الموبايل ← اللغة والإدخال (Language & input) ← ' +
+        'تحويل النص لكلام (Text-to-speech output) ← محرك Google ← نزّل بيانات صوت ' + langName + '.'
+      );
+      resolve();
+      return;
+    }
     const match = candidates.find(v=>/google/i.test(v.name)) || candidates[0];
     if(match) u.voice = match;
     u.rate = rate;
     u.onend = resolve;
-    u.onerror = resolve;
+    u.onerror = function(e){
+      showDebugError('فشل نطق "' + text + '" (' + base + '): ' + ((e && e.error) || 'سبب غير معروف'));
+      resolve();
+    };
     speechSynthesis.speak(u);
   });
 }
