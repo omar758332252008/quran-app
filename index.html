@@ -216,9 +216,19 @@ function showDebugError(msg){
   if(!el){
     el = document.createElement('div');
     el.id = 'debugBanner';
-    el.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#be123c; color:#fff; font-size:12px; padding:10px 14px; z-index:99999; direction:ltr; text-align:left; max-height:35vh; overflow:auto; line-height:1.5;';
+    el.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#be123c; color:#fff; font-size:12px; padding:10px 34px 10px 14px; z-index:99999; direction:ltr; text-align:left; max-height:35vh; overflow:auto; line-height:1.5;';
     document.body.appendChild(el);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'position:absolute; top:6px; right:8px; background:none; border:none; color:#fff; font-size:16px; cursor:pointer; padding:4px;';
+    closeBtn.addEventListener('click', function(){ el.remove(); });
+    el.appendChild(closeBtn);
   }
+  // Same failure (e.g. "no Arabic voice") tends to repeat once per word -
+  // showing it once is a fix, showing it 30 times is a new bug.
+  const lines = [...el.children].filter(c => c.tagName === 'DIV');
+  const last = lines[lines.length - 1];
+  if(last && last.textContent === msg) return;
   const line = document.createElement('div');
   line.textContent = msg;
   el.appendChild(line);
