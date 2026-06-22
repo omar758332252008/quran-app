@@ -333,10 +333,11 @@ async function speak(text, lang, rate=0.92){
     const candidates = voices.filter(v=>v.lang===lang || (v.lang && v.lang.toLowerCase().startsWith(base)));
     if(candidates.length===0){
       const langName = base==='ar' ? 'العربي' : (base==='fr' ? 'الفرنساوي' : base);
+      const allLangs = voices.length ? [...new Set(voices.map(v=>v.lang))].join('، ') : 'مفيش ولا صوت واحد ظاهر للمتصفح';
       showDebugError(
-        'مفيش صوت ' + langName + ' متاح على جهازك دلوقتي، فمش هيتنطق. ' +
-        'علشان تظبطه: روح إعدادات الموبايل ← اللغة والإدخال (Language & input) ← ' +
-        'تحويل النص لكلام (Text-to-speech output) ← محرك Google ← نزّل بيانات صوت ' + langName + '.'
+        'مفيش صوت ' + langName + ' شغال مع المتصفح حاليًا. ' +
+        'الأصوات اللي شايفها المتصفح دلوقتي: ' + allLangs + '. ' +
+        'لو نزّلت صوت العربي بس برضو مش ظاهر هنا، جرّب تقفل المتصفح بالكامل من الـ Recent apps وتفتحه تاني (لازم يعيد التشغيل عشان يشوف الصوت الجديد)، ولو برضو مش ظاهر يبقى المحرك المتاح عندك مش بيدعم العربي.'
       );
       resolve();
       return;
