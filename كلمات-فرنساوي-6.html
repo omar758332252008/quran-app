@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>حفظ كلمات فرنساوي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#120B22;
+    --bg-card:#1E1432;
+    --bg-card-2:#251A3D;
+    --line:#352a52;
+    --violet:#8B5CF6;
+    --violet-soft:#C4B5FD;
+    --pink:#F472B6;
+    --mint:#34D399;
+    --text:#EDE7FB;
+    --text-dim:#9D8FC4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg-deep); color:var(--text); font-family:'Tajawal',sans-serif; height:100%; overflow:hidden;}
+  .fr{font-family:'Poppins',sans-serif; direction:ltr; unicode-bidi:plaintext;}
+  #app{display:flex; flex-direction:column; height:100vh; max-width:560px; margin:0 auto; position:relative;}
+
+  /* ===== Header ===== */
+  header{padding:18px 20px 14px; flex-shrink:0; position:relative; overflow:hidden;}
+  header::before{content:""; position:absolute; top:-60px; left:-40px; width:220px; height:220px; background:radial-gradient(circle, rgba(139,92,246,0.35), transparent 70%); pointer-events:none;}
+  header h1{margin:0; font-size:22px; font-weight:900; letter-spacing:.3px;}
+  header h1 span{color:var(--violet-soft);}
+  header p{margin:4px 0 0; font-size:13px; color:var(--text-dim);}
+
+  /* ===== Tab content ===== */
+  main{flex:1; overflow-y:auto; padding:6px 18px 18px; -webkit-overflow-scrolling:touch;}
+  .tab{display:none; animation:fadeIn .25s ease;}
+  .tab.active{display:block;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ===== Inputs ===== */
+  label{display:block; font-size:12px; color:var(--text-dim); margin:14px 2px 6px;}
+  input[type=text], textarea{
+    width:100%; background:var(--bg-card); border:1px solid var(--line); border-radius:14px;
+    padding:13px 14px; color:var(--text); font-size:16px; font-family:inherit; outline:none;
+  }
+  input.fr-input{font-family:'Poppins',sans-serif; direction:ltr; text-align:left;}
+  textarea{resize:vertical; min-height:96px; font-size:14px; direction:ltr; text-align:left; font-family:'Poppins',sans-serif;}
+  input:focus, textarea:focus{border-color:var(--violet);}
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    width:100%; border:none; border-radius:14px; padding:14px; margin-top:14px;
+    font-family:'Tajawal',sans-serif; font-weight:700; font-size:15px; cursor:pointer;
+    background:linear-gradient(135deg, var(--violet), #6D28D9); color:#fff;
+    box-shadow:0 8px 20px -8px rgba(139,92,246,.6);
+  }
+  .btn:active{transform:scale(.97);}
+  .btn.secondary{background:var(--bg-card); border:1px solid var(--line); box-shadow:none; color:var(--violet-soft);}
+  .hint{font-size:11.5px; color:var(--text-dim); margin-top:8px; line-height:1.7;}
+  .divider{display:flex; align-items:center; gap:10px; margin:24px 0 4px; color:var(--text-dim); font-size:12px;}
+  .divider::before, .divider::after{content:""; flex:1; height:1px; background:var(--line);}
+
+  /* ===== Word list ===== */
+  .count-pill{display:inline-block; background:var(--bg-card); border:1px solid var(--line); color:var(--violet-soft); font-size:12.5px; padding:6px 14px; border-radius:100px; margin:8px 0 14px;}
+  .empty{text-align:center; padding:60px 20px; color:var(--text-dim);}
+  .empty .emoji{font-size:38px; display:block; margin-bottom:10px;}
+  .card{
+    background:var(--bg-card); border:1px solid var(--line); border-radius:16px; padding:14px 16px;
+    margin-bottom:10px; display:flex; align-items:center; gap:12px; position:relative; overflow:hidden;
+  }
+  .card::before{content:""; position:absolute; right:0; top:0; bottom:0; width:4px; background:var(--violet);}
+  .card .txt{flex:1; min-width:0;}
+  .card .txt .fr{font-size:17px; font-weight:600;}
+  .card .txt .ar{font-size:14.5px; color:var(--violet-soft); margin-top:3px;}
+  .icon-btn{
+    flex-shrink:0; width:38px; height:38px; border-radius:50%; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    background:var(--bg-card-2); color:var(--text);
+  }
+  .icon-btn:active{transform:scale(.9);}
+  .icon-btn.del{color:#fb7185; font-size:15px;}
+  .card-actions{display:flex; gap:6px; flex-shrink:0;}
+
+  /* ===== Memorize tab ===== */
+  .stage{
+    background:linear-gradient(160deg, var(--bg-card), var(--bg-card-2));
+    border:1px solid var(--line); border-radius:22px; padding:30px 22px; text-align:center; margin-top:10px;
+    position:relative; min-height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .stage .progress{font-size:12px; color:var(--text-dim); margin-bottom:14px;}
+  .stage .fr{font-size:30px; font-weight:700;}
+  .stage .ar{font-size:20px; color:var(--violet-soft); margin-top:10px;}
+  .stage .placeholder{color:var(--text-dim); font-size:14px;}
+  .controls-row{display:flex; gap:10px; margin-top:16px;}
+  .controls-row .btn{margin-top:0;}
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; background:var(--bg-card); border:1px solid var(--line); border-radius:14px; padding:12px 16px; margin-top:14px; font-size:14px;}
+  .switch{width:42px; height:24px; background:var(--line); border-radius:100px; position:relative; cursor:pointer; flex-shrink:0;}
+  .switch.on{background:var(--violet);}
+  .switch::after{content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:.2s;}
+  .switch.on::after{left:21px;}
+
+  /* ===== Quiz tab ===== */
+  .quiz-meta{display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:13px; color:var(--text-dim);}
+  .flashcard{
+    margin-top:14px; min-height:220px; background:linear-gradient(160deg, var(--bg-card), var(--bg-card-2));
+    border:1px solid var(--line); border-radius:22px; display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:30px 20px; cursor:pointer; position:relative;
+  }
+  .flashcard .face{font-size:26px; font-weight:700;}
+  .flashcard .sub{font-size:12px; color:var(--text-dim); position:absolute; top:16px; right:18px;}
+  .flashcard .flip-hint{font-size:12px; color:var(--text-dim); position:absolute; bottom:14px;}
+  .quiz-buttons{display:flex; gap:10px; margin-top:16px;}
+  .quiz-buttons .btn{margin-top:0;}
+  .btn.know{background:linear-gradient(135deg, var(--mint), #059669);}
+  .btn.dontknow{background:linear-gradient(135deg, #fb7185, #be123c);}
+
+  /* ===== Bottom nav ===== */
+  nav{display:flex; flex-shrink:0; border-top:1px solid var(--line); background:var(--bg-card); padding:6px 4px calc(env(safe-area-inset-bottom,0px) + 6px);}
+  nav button{
+    flex:1; background:none; border:none; color:var(--text-dim); display:flex; flex-direction:column;
+    align-items:center; gap:3px; padding:8px 0; font-family:'Tajawal',sans-serif; font-size:11.5px; cursor:pointer;
+  }
+  nav button .ic{font-size:19px;}
+  nav button.active{color:var(--violet-soft);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <button id="backBtn" class="icon-btn" style="display:none; position:absolute; left:14px; top:16px; background:var(--bg-card-2);" onclick="goBack()">➡️</button>
+    <h1>هتحفظ <span>فرنساوي</span> 🇫🇷</h1>
+    <p>امتحان بكره؟ يلا نحفظ كلمة كلمة</p>
+  </header>
+
+  <main>
+
+    <!-- ADD TAB -->
+    <section class="tab" id="tab-add">
+      <label>الكلمة بالفرنساوي</label>
+      <input type="text" id="inputFr" class="fr-input" placeholder="bonjour">
+      <label>المعنى بالعربي</label>
+      <input type="text" id="inputAr" placeholder="صباح الخير">
+      <button class="btn" onclick="addSingleWord()">➕ ضيف الكلمة</button>
+      <div class="hint" id="addHint"></div>
+
+      <div class="divider">أو استورد كذا كلمة مرة واحدة</div>
+      <label>كل كلمة في سطر، بالشكل ده: <span class="fr">bonjour - صباح الخير</span></label>
+      <textarea id="bulkInput" placeholder="bonjour - صباح الخير&#10;merci - شكراً&#10;au revoir - مع السلامة"></textarea>
+      <button class="btn secondary" onclick="bulkImport()">📥 استورد الكل</button>
+      <div class="hint" id="bulkHint">ممكن تفصل الكلمة عن المعنى بـ "-" أو ":" أو فاصلة. كل سطر = كلمة واحدة.</div>
+
+      <div class="divider">أو رفع ملف txt</div>
+      <input type="file" id="fileInput" accept=".txt,text/plain" style="display:none" onchange="handleFileUpload(event)">
+      <button class="btn secondary" onclick="document.getElementById('fileInput').click()">📂 اختار ملف txt</button>
+      <div class="hint" id="fileNameHint"></div>
+      <div class="hint">الملف لازم يكون كل سطر فيه كلمة بالشكل: <span class="fr">bonjour - صباح الخير</span></div>
+    </section>
+
+    <!-- LIST TAB -->
+    <section class="tab" id="tab-list">
+      <div id="listCount" class="count-pill">0 كلمة محفوظة</div>
+      <div id="listContainer"></div>
+    </section>
+
+    <!-- MEMORIZE TAB -->
+    <section class="tab" id="tab-memorize">
+      <div class="stage" id="memStage">
+        <div class="placeholder">دوس "ابدأ" وهسمعك كل الكلمات بالفرنساوي وبعدها بالعربي 🎧</div>
+      </div>
+      <div class="controls-row">
+        <button class="btn" id="memPlayBtn" onclick="toggleMemPlay()">▶️ ابدأ الحفظ</button>
+        <button class="btn secondary" onclick="stopMem()" style="max-width:90px;">⏹️ وقف</button>
+      </div>
+      <div class="toggle-row">
+        <span>كرر تاني لما يخلص</span>
+        <div class="switch" id="loopSwitch" onclick="toggleLoop()"></div>
+      </div>
+    </section>
+
+    <!-- QUIZ TAB -->
+    <section class="tab" id="tab-quiz">
+      <div class="quiz-meta">
+        <span id="quizProgress">0 / 0</span>
+        <span id="quizDirBtn" onclick="toggleQuizDirection()" style="cursor:pointer; color:var(--violet-soft);">🔁 فرنساوي → عربي</span>
+      </div>
+      <div class="flashcard" id="flashcard" onclick="flipCard()">
+        <span class="sub" id="flashSub">دوس عشان تقلب الكارت</span>
+        <div class="face" id="flashFace">ضيف كلمات الأول</div>
+        <span class="flip-hint">👆 اقلب</span>
+      </div>
+      <div class="quiz-buttons">
+        <button class="btn dontknow" onclick="quizAnswer(false)">😵 مش متذكر</button>
+        <button class="btn know" onclick="quizAnswer(true)">✅ عارفها</button>
+      </div>
+      <button class="btn secondary" onclick="startQuiz()">🔀 خلط الكلمات من جديد</button>
+    </section>
+
+  </main>
+
+  <nav>
+    <button class="nav-btn active" data-tab="add" onclick="switchTab('add')"><span class="ic">➕</span>إضافة</button>
+    <button class="nav-btn" data-tab="list" onclick="switchTab('list')"><span class="ic">📋</span>كلماتي</button>
+    <button class="nav-btn" data-tab="memorize" onclick="switchTab('memorize')"><span class="ic">🎧</span>حفظ</button>
+    <button class="nav-btn" data-tab="quiz" onclick="switchTab('quiz')"><span class="ic">🃏</span>اختبار</button>
+  </nav>
+
+</div>
+
+<script>
+/* ---------- Visible error banner (so failures are never silent) ---------- */
+function showDebugError(msg){
+  let el = document.getElementById('debugBanner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'debugBanner';
+    el.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#be123c; color:#fff; font-size:12px; padding:10px 14px; z-index:99999; direction:ltr; text-align:left; max-height:35vh; overflow:auto; line-height:1.5;';
+    document.body.appendChild(el);
+  }
+  const line = document.createElement('div');
+  line.textContent = msg;
+  el.appendChild(line);
+}
+window.addEventListener('error', function(e){ showDebugError('JS Error: ' + e.message + ' (line ' + e.lineno + ')'); });
+window.addEventListener('unhandledrejection', function(e){ showDebugError('Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
+
+let words = [];
+let memPlaying = false, memIndex = 0, memLoop = false, memStopFlag = false;
+let quizDeck = [], quizIndex = 0, quizFlipped = false, quizDirFrToAr = true, quizScoreKnown = 0;
+
+/* ---------- Storage ---------- */
+async function loadWords(){
+  try{
+    if(window.storage && typeof window.storage.get === 'function'){
+      const res = await window.storage.get('french-words');
+      words = res ? JSON.parse(res.value) : [];
+    } else {
+      const raw = localStorage.getItem('french-words-local');
+      words = raw ? JSON.parse(raw) : [];
+    }
+  }catch(e){ words = []; }
+  renderList();
+}
+async function saveWords(){
+  try{
+    if(window.storage && typeof window.storage.set === 'function'){
+      await window.storage.set('french-words', JSON.stringify(words));
+    } else {
+      localStorage.setItem('french-words-local', JSON.stringify(words));
+    }
+  }catch(e){
+    try{ localStorage.setItem('french-words-local', JSON.stringify(words)); }catch(e2){}
+  }
+}
+
+/* ---------- Tabs ---------- */
+let currentTab = 'add';
+let previousTab = null;
+function switchTab(name){
+  try{
+    if(name !== currentTab){
+      previousTab = currentTab;
+      currentTab = name;
+    }
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('tab-'+name).classList.add('active');
+    document.querySelector('.nav-btn[data-tab="'+name+'"]').classList.add('active');
+    document.getElementById('backBtn').style.display = previousTab ? 'flex' : 'none';
+    if(name==='list') renderList();
+    if(name==='quiz' && quizDeck.length===0) startQuiz();
+  }catch(err){
+    showDebugError('Tab switch error: ' + err.message);
+  }
+}
+function goBack(){
+  if(!previousTab) return;
+  const target = previousTab;
+  switchTab(target);
+}
+
+/* ---------- Speech ---------- */
+let speechWarmed = false;
+function warmUpSpeech(){
+  if(speechWarmed || !('speechSynthesis' in window)) return;
+  speechWarmed = true;
+  try{
+    speechSynthesis.getVoices();
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+document.addEventListener('pointerdown', warmUpSpeech, {once:true});
+function ensureVoices(){
+  return new Promise(resolve=>{
+    if(!('speechSynthesis' in window)){
+      showDebugError('المتصفح ده مش بيدعم خاصية النطق الصوتي (Speech Synthesis). جرب تفتح التطبيق من Google Chrome.');
+      resolve(); return;
+    }
+    const voices = speechSynthesis.getVoices();
+    if(voices && voices.length>0){ resolve(); return; }
+    speechSynthesis.onvoiceschanged = ()=>resolve();
+    setTimeout(()=>{
+      if(speechSynthesis.getVoices().length===0){
+        showDebugError('مفيش أصوات نطق متاحة على الموبايل دلوقتي. روح إعدادات الموبايل ← اللغة والإدخال ← تحويل النص لكلام، وتأكد إن محرك Google متفعّل ولغة العربي والفرنساوي متحمّلين.');
+      }
+      resolve();
+    }, 1200);
+  });
+}
+async function speak(text, lang, rate=0.92){
+  if(!('speechSynthesis' in window)) return;
+  await ensureVoices();
+  return new Promise(resolve=>{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    const voices = speechSynthesis.getVoices();
+    const base = lang.split('-')[0];
+    const candidates = voices.filter(v=>v.lang===lang || (v.lang && v.lang.toLowerCase().startsWith(base)));
+    const match = candidates.find(v=>/google/i.test(v.name)) || candidates[0];
+    if(match) u.voice = match;
+    u.rate = rate;
+    u.onend = resolve;
+    u.onerror = resolve;
+    speechSynthesis.speak(u);
+  });
+}
+async function speakBoth(fr, ar){
+  await speak(fr, 'fr-FR', 0.8);
+  await pause(400);
+  await speak(ar, 'ar-SA', 0.95);
+}
+function pause(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+/* ---------- Add / Import ---------- */
+function addSingleWord(){
+  const fr = document.getElementById('inputFr').value.trim();
+  const ar = document.getElementById('inputAr').value.trim();
+  if(!fr || !ar) return;
+  words.push({id:Date.now()+Math.random(), fr, ar});
+  document.getElementById('inputFr').value='';
+  document.getElementById('inputAr').value='';
+  saveWords();
+  speakBoth(fr, ar);
+  const hint = document.getElementById('addHint');
+  hint.style.color = 'var(--mint)';
+  hint.textContent = `✅ ضفت "${fr}" — عندك دلوقتي ${words.length} كلمة. ممكن تضيف كذا كلمة ورا بعض، وتروح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+  renderList();
+}
+function bulkImport(){
+  const raw = document.getElementById('bulkInput').value;
+  const added = importLines(raw);
+  const hint = document.getElementById('bulkHint');
+  if(added>0){
+    document.getElementById('bulkInput').value='';
+    saveWords();
+    renderList();
+    hint.style.color = 'var(--mint)';
+    hint.textContent = `✅ ضفت ${added} كلمة. عندك دلوقتي ${words.length} كلمة محفوظة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+  } else {
+    hint.style.color = '#fb7185';
+    hint.textContent = 'مفيش كلمات صالحة. اتأكد إن كل سطر بالشكل: bonjour - صباح الخير';
+  }
+}
+function importLines(raw){
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  let added = 0;
+  lines.forEach((line, i)=>{
+    const parts = line.split(/[-:،,]/);
+    if(parts.length>=2){
+      const fr = parts[0].trim();
+      const ar = parts.slice(1).join(' ').trim();
+      if(fr && ar){ words.push({id:Date.now()+Math.random()+i, fr, ar}); added++; }
+    }
+  });
+  return added;
+}
+function handleFileUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const hint = document.getElementById('fileNameHint');
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const added = importLines(e.target.result);
+    if(added>0){
+      saveWords();
+      renderList();
+      hint.textContent = `✅ تم استيراد ${added} كلمة من "${file.name}" — عندك دلوقتي ${words.length} كلمة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+      hint.style.color = 'var(--mint)';
+    } else {
+      hint.textContent = `مفيش كلمات صالحة في "${file.name}". تأكد من الشكل: bonjour - صباح الخير`;
+      hint.style.color = '#fb7185';
+    }
+    event.target.value = '';
+  };
+  reader.onerror = function(){
+    hint.textContent = 'حصل خطأ في قراءة الملف، جرب تاني';
+    hint.style.color = '#fb7185';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+function deleteWord(id){
+  words = words.filter(w=>w.id!==id);
+  saveWords();
+  renderList();
+}
+
+/* ---------- List rendering ---------- */
+function renderList(){
+  const container = document.getElementById('listContainer');
+  document.getElementById('listCount').textContent = words.length + ' كلمة محفوظة';
+  if(words.length===0){
+    container.innerHTML = '<div class="empty"><span class="emoji">📝</span>لسه مفيش كلمات...<br>روح لتاب "إضافة" وضيف أول كلمة!</div>';
+    return;
+  }
+  container.innerHTML = words.map(w=>`
+    <div class="card">
+      <div class="card-actions">
+        <button class="icon-btn" onclick="speakBoth('${escAttr(w.fr)}','${escAttr(w.ar)}')">🔊</button>
+      </div>
+      <div class="txt">
+        <div class="fr">${esc(w.fr)}</div>
+        <div class="ar">${esc(w.ar)}</div>
+      </div>
+      <button class="icon-btn del" onclick="deleteWord(${w.id})">🗑️</button>
+    </div>
+  `).join('');
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+/* ---------- Memorize mode ---------- */
+function toggleLoop(){
+  memLoop = !memLoop;
+  document.getElementById('loopSwitch').classList.toggle('on', memLoop);
+}
+async function toggleMemPlay(){
+  if(memPlaying){ pauseMem(); return; }
+  if(words.length===0){ switchTab('add'); return; }
+  memPlaying = true; memStopFlag = false;
+  document.getElementById('memPlayBtn').textContent = '⏸️ وقف مؤقت';
+  await runMemLoop();
+}
+function pauseMem(){
+  memPlaying = false; memStopFlag = true;
+  speechSynthesis.cancel();
+  document.getElementById('memPlayBtn').textContent = '▶️ كمّل';
+}
+function stopMem(){
+  memPlaying = false; memStopFlag = true; memIndex = 0;
+  speechSynthesis.cancel();
+  document.getElementById('memPlayBtn').textContent = '▶️ ابدأ الحفظ';
+  document.getElementById('memStage').innerHTML = '<div class="placeholder">دوس "ابدأ" وهسمعك كل الكلمات بالفرنساوي وبعدها بالعربي 🎧</div>';
+}
+async function runMemLoop(){
+  while(memIndex < words.length){
+    if(memStopFlag) return;
+    const w = words[memIndex];
+    document.getElementById('memStage').innerHTML = `
+      <div class="progress">${memIndex+1} من ${words.length}</div>
+      <div class="fr">${esc(w.fr)}</div>
+      <div class="ar">${esc(w.ar)}</div>`;
+    await speak(w.fr, 'fr-FR', 0.8);
+    if(memStopFlag) return;
+    await pause(450);
+    await speak(w.ar, 'ar-SA', 0.95);
+    if(memStopFlag) return;
+    await pause(900);
+    memIndex++;
+  }
+  if(memLoop && !memStopFlag){
+    memIndex = 0;
+    await runMemLoop();
+  } else {
+    memPlaying = false;
+    document.getElementById('memPlayBtn').textContent = '▶️ ابدأ من الأول';
+    memIndex = 0;
+  }
+}
+
+/* ---------- Quiz mode ---------- */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function startQuiz(){
+  quizDeck = shuffle(words);
+  quizIndex = 0; quizFlipped = false; quizScoreKnown = 0;
+  renderQuizCard();
+}
+function toggleQuizDirection(){
+  quizDirFrToAr = !quizDirFrToAr;
+  document.getElementById('quizDirBtn').textContent = quizDirFrToAr ? '🔁 فرنساوي → عربي' : '🔁 عربي → فرنساوي';
+  quizFlipped = false;
+  renderQuizCard();
+}
+function renderQuizCard(){
+  const total = quizDeck.length;
+  document.getElementById('quizProgress').textContent = (total===0 ? '0' : Math.min(quizIndex+1,total)) + ' / ' + total;
+  const card = document.getElementById('flashcard');
+  const face = document.getElementById('flashFace');
+  const sub = document.getElementById('flashSub');
+  if(total===0){
+    face.textContent = 'ضيف كلمات الأول';
+    sub.textContent = '';
+    return;
+  }
+  if(quizIndex>=total){
+    face.innerHTML = `خلصت! 🎉<br><span style="font-size:14px; color:var(--text-dim)">عرفت ${quizScoreKnown} من ${total}</span>`;
+    sub.textContent = '';
+    return;
+  }
+  const w = quizDeck[quizIndex];
+  const frontWord = quizDirFrToAr ? w.fr : w.ar;
+  const frontLang = quizDirFrToAr ? 'fr' : 'ar';
+  sub.textContent = quizFlipped ? 'الإجابة' : 'السؤال';
+  face.className = 'face ' + (frontLang==='fr' && !quizFlipped ? 'fr' : (frontLang==='ar' && quizFlipped ? 'fr' : ''));
+  if(!quizFlipped){
+    face.textContent = frontWord;
+    face.className = 'face' + (quizDirFrToAr ? ' fr' : '');
+  } else {
+    const answer = quizDirFrToAr ? w.ar : w.fr;
+    face.textContent = answer;
+    face.className = 'face' + (!quizDirFrToAr ? ' fr' : '');
+  }
+}
+function flipCard(){
+  if(quizDeck.length===0 || quizIndex>=quizDeck.length) return;
+  quizFlipped = !quizFlipped;
+  renderQuizCard();
+  const w = quizDeck[quizIndex];
+  if(quizFlipped){
+    const lang = quizDirFrToAr ? 'ar-SA' : 'fr-FR';
+    const text = quizDirFrToAr ? w.ar : w.fr;
+    speak(text, lang);
+  } else {
+    const lang = quizDirFrToAr ? 'fr-FR' : 'ar-SA';
+    const text = quizDirFrToAr ? w.fr : w.ar;
+    speak(text, lang);
+  }
+}
+function quizAnswer(knew){
+  if(quizDeck.length===0 || quizIndex>=quizDeck.length) return;
+  if(knew) quizScoreKnown++;
+  quizIndex++;
+  quizFlipped = false;
+  renderQuizCard();
+}
+
+/* ---------- Init ---------- */
+loadWords();
+switchTab('add');
+</script>
+</body>
+</html>
