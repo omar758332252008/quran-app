@@ -121,6 +121,15 @@
   }
   nav button .ic{font-size:19px;}
   nav button.active{color:var(--violet-soft);}
+
+  /* ===== Toast ===== */
+  .toast{
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+    background:var(--bg-card); border:1px solid var(--line); border-radius:12px;
+    padding:10px 18px; font-size:13px; color:var(--text); z-index:9999;
+    box-shadow:0 8px 24px rgba(0,0,0,.4); animation:toastIn .3s ease;
+  }
+  @keyframes toastIn{from{opacity:0; transform:translateX(-50%) translateY(10px);} to{opacity:1; transform:translateX(-50%) translateY(0);}}
 </style>
 </head>
 <body>
@@ -207,214 +216,295 @@
 </div>
 
 <script>
-/* ---------- Visible error banner (so failures are never silent) ---------- */
-function showDebugError(msg){
-  let el = document.getElementById('debugBanner');
-  if(!el){
-    el = document.createElement('div');
-    el.id = 'debugBanner';
-    el.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#be123c; color:#fff; font-size:12px; padding:10px 14px; z-index:99999; direction:ltr; text-align:left; max-height:35vh; overflow:auto; line-height:1.5;';
-    document.body.appendChild(el);
-  }
-  const line = document.createElement('div');
-  line.textContent = msg;
-  el.appendChild(line);
+/* ========== Audio Engine (Google Translate TTS) ========== */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let currentAudio = null;
+let currentSource = null;
+
+function getGoogleTTSUrl(text, lang) {
+    // Encode text for URL
+    const encoded = encodeURIComponent(text);
+    // Google Translate TTS endpoint (free, no API key needed)
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${lang}&client=tw-ob`;
 }
-window.addEventListener('error', function(e){ showDebugError('JS Error: ' + e.message + ' (line ' + e.lineno + ')'); });
-window.addEventListener('unhandledrejection', function(e){ showDebugError('Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
+
+async function speak(text, lang, rate = 1.0) {
+    if (!text || !text.trim()) return;
+
+    try {
+        // Cancel any ongoing speech
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
+        if (currentSource) {
+            currentSource.stop();
+            currentSource = null;
+        }
+
+        const url = getGoogleTTSUrl(text, lang);
+
+        // Use Audio API for better control
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (!response.ok) {
+            // Fallback to HTML5 Audio
+            return speakFallback(text, lang, rate);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+
+        // Resume audio context if suspended (needed for mobile)
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+        }
+
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.playbackRate.value = rate;
+
+        // Add a small gain node to control volume
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 1.0;
+
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        currentSource = source;
+
+        return new Promise((resolve) => {
+            source.onended = () => {
+                currentSource = null;
+                resolve();
+            };
+            source.start(0);
+        });
+
+    } catch (err) {
+        console.warn('Audio API failed, trying fallback:', err);
+        return speakFallback(text, lang, rate);
+    }
+}
+
+function speakFallback(text, lang, rate = 1.0) {
+    return new Promise((resolve) => {
+        const url = getGoogleTTSUrl(text, lang);
+        const audio = new Audio();
+        audio.src = url;
+        audio.playbackRate = rate;
+
+        currentAudio = audio;
+
+        audio.onended = () => {
+            currentAudio = null;
+            resolve();
+        };
+        audio.onerror = () => {
+            currentAudio = null;
+            showToast('⚠️ مشكلة في تشغيل الصوت، تأكد من الاتصال بالنت');
+            resolve();
+        };
+
+        audio.play().catch(err => {
+            currentAudio = null;
+            showToast('⚠️ فشل تشغيل الصوت. جرب تدوس على الشاشة الأول');
+            resolve();
+        });
+    });
+}
+
+function stopSpeech() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+    }
+    if (currentSource) {
+        currentSource.stop();
+        currentSource = null;
+    }
+    if (audioCtx.state === 'running') {
+        audioCtx.suspend();
+    }
+}
+
+async function speakBoth(fr, ar) {
+    await speak(fr, 'fr', 0.85);
+    await pause(500);
+    await speak(ar, 'ar', 0.95);
+}
+
+function pause(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function showToast(msg) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+/* ========== Visible error banner ========== */
+function showDebugError(msg) {
+    let el = document.getElementById('debugBanner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'debugBanner';
+        el.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#be123c; color:#fff; font-size:12px; padding:10px 14px; z-index:99999; direction:ltr; text-align:left; max-height:35vh; overflow:auto; line-height:1.5;';
+        document.body.appendChild(el);
+    }
+    const line = document.createElement('div');
+    line.textContent = msg;
+    el.appendChild(line);
+}
+window.addEventListener('error', function (e) { showDebugError('JS Error: ' + e.message + ' (line ' + e.lineno + ')'); });
+window.addEventListener('unhandledrejection', function (e) { showDebugError('Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
 
 let words = [];
 let memPlaying = false, memIndex = 0, memLoop = false, memStopFlag = false;
 let quizDeck = [], quizIndex = 0, quizFlipped = false, quizDirFrToAr = true, quizScoreKnown = 0;
 
-/* ---------- Storage ---------- */
-async function loadWords(){
-  try{
-    if(window.storage && typeof window.storage.get === 'function'){
-      const res = await window.storage.get('french-words');
-      words = res ? JSON.parse(res.value) : [];
-    } else {
-      const raw = localStorage.getItem('french-words-local');
-      words = raw ? JSON.parse(raw) : [];
-    }
-  }catch(e){ words = []; }
-  renderList();
+/* ========== Storage ========== */
+async function loadWords() {
+    try {
+        if (window.storage && typeof window.storage.get === 'function') {
+            const res = await window.storage.get('french-words');
+            words = res ? JSON.parse(res.value) : [];
+        } else {
+            const raw = localStorage.getItem('french-words-local');
+            words = raw ? JSON.parse(raw) : [];
+        }
+    } catch (e) { words = []; }
+    renderList();
 }
-async function saveWords(){
-  try{
-    if(window.storage && typeof window.storage.set === 'function'){
-      await window.storage.set('french-words', JSON.stringify(words));
-    } else {
-      localStorage.setItem('french-words-local', JSON.stringify(words));
+async function saveWords() {
+    try {
+        if (window.storage && typeof window.storage.set === 'function') {
+            await window.storage.set('french-words', JSON.stringify(words));
+        } else {
+            localStorage.setItem('french-words-local', JSON.stringify(words));
+        }
+    } catch (e) {
+        try { localStorage.setItem('french-words-local', JSON.stringify(words)); } catch (e2) { }
     }
-  }catch(e){
-    try{ localStorage.setItem('french-words-local', JSON.stringify(words)); }catch(e2){}
-  }
 }
 
-/* ---------- Tabs ---------- */
+/* ========== Tabs ========== */
 let currentTab = 'add';
 let previousTab = null;
-function switchTab(name){
-  try{
-    if(name !== currentTab){
-      previousTab = currentTab;
-      currentTab = name;
+function switchTab(name) {
+    try {
+        if (name !== currentTab) {
+            previousTab = currentTab;
+            currentTab = name;
+        }
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + name).classList.add('active');
+        document.querySelector('.nav-btn[data-tab="' + name + '"]').classList.add('active');
+        document.getElementById('backBtn').style.display = previousTab ? 'flex' : 'none';
+        if (name === 'list') renderList();
+        if (name === 'quiz' && quizDeck.length === 0) startQuiz();
+    } catch (err) {
+        showDebugError('Tab switch error: ' + err.message);
     }
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-    document.getElementById('tab-'+name).classList.add('active');
-    document.querySelector('.nav-btn[data-tab="'+name+'"]').classList.add('active');
-    document.getElementById('backBtn').style.display = previousTab ? 'flex' : 'none';
-    if(name==='list') renderList();
-    if(name==='quiz' && quizDeck.length===0) startQuiz();
-  }catch(err){
-    showDebugError('Tab switch error: ' + err.message);
-  }
 }
-function goBack(){
-  if(!previousTab) return;
-  const target = previousTab;
-  switchTab(target);
+function goBack() {
+    if (!previousTab) return;
+    const target = previousTab;
+    switchTab(target);
 }
 
-/* ---------- Speech ---------- */
-let speechWarmed = false;
-function warmUpSpeech(){
-  if(speechWarmed || !('speechSynthesis' in window)) return;
-  speechWarmed = true;
-  try{
-    speechSynthesis.getVoices();
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;
-    speechSynthesis.speak(u);
-  }catch(e){}
+/* ========== Add / Import ========== */
+function addSingleWord() {
+    const fr = document.getElementById('inputFr').value.trim();
+    const ar = document.getElementById('inputAr').value.trim();
+    if (!fr || !ar) return;
+    words.push({ id: Date.now() + Math.random(), fr, ar });
+    document.getElementById('inputFr').value = '';
+    document.getElementById('inputAr').value = '';
+    saveWords();
+    speakBoth(fr, ar);
+    const hint = document.getElementById('addHint');
+    hint.style.color = 'var(--mint)';
+    hint.textContent = `✅ ضفت "${fr}" — عندك دلوقتي ${words.length} كلمة. ممكن تضيف كذا كلمة ورا بعض، وتروح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+    renderList();
 }
-document.addEventListener('pointerdown', warmUpSpeech, {once:true});
-function ensureVoices(){
-  return new Promise(resolve=>{
-    if(!('speechSynthesis' in window)){
-      showDebugError('المتصفح ده مش بيدعم خاصية النطق الصوتي (Speech Synthesis). جرب تفتح التطبيق من Google Chrome.');
-      resolve(); return;
+function bulkImport() {
+    const raw = document.getElementById('bulkInput').value;
+    const added = importLines(raw);
+    const hint = document.getElementById('bulkHint');
+    if (added > 0) {
+        document.getElementById('bulkInput').value = '';
+        saveWords();
+        renderList();
+        hint.style.color = 'var(--mint)';
+        hint.textContent = `✅ ضفت ${added} كلمة. عندك دلوقتي ${words.length} كلمة محفوظة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+    } else {
+        hint.style.color = '#fb7185';
+        hint.textContent = 'مفيش كلمات صالحة. اتأكد إن كل سطر بالشكل: bonjour - صباح الخير';
     }
-    const voices = speechSynthesis.getVoices();
-    if(voices && voices.length>0){ resolve(); return; }
-    speechSynthesis.onvoiceschanged = ()=>resolve();
-    setTimeout(()=>{
-      if(speechSynthesis.getVoices().length===0){
-        showDebugError('مفيش أصوات نطق متاحة على الموبايل دلوقتي. روح إعدادات الموبايل ← اللغة والإدخال ← تحويل النص لكلام، وتأكد إن محرك Google متفعّل ولغة العربي والفرنساوي متحمّلين.');
-      }
-      resolve();
-    }, 1200);
-  });
 }
-async function speak(text, lang, rate=0.92){
-  if(!('speechSynthesis' in window)) return;
-  await ensureVoices();
-  return new Promise(resolve=>{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang;
-    const voices = speechSynthesis.getVoices();
-    const base = lang.split('-')[0];
-    const candidates = voices.filter(v=>v.lang===lang || (v.lang && v.lang.toLowerCase().startsWith(base)));
-    const match = candidates.find(v=>/google/i.test(v.name)) || candidates[0];
-    if(match) u.voice = match;
-    u.rate = rate;
-    u.onend = resolve;
-    u.onerror = resolve;
-    speechSynthesis.speak(u);
-  });
+function importLines(raw) {
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    let added = 0;
+    lines.forEach((line, i) => {
+        const parts = line.split(/[-:،,]/);
+        if (parts.length >= 2) {
+            const fr = parts[0].trim();
+            const ar = parts.slice(1).join(' ').trim();
+            if (fr && ar) { words.push({ id: Date.now() + Math.random() + i, fr, ar }); added++; }
+        }
+    });
+    return added;
 }
-async function speakBoth(fr, ar){
-  await speak(fr, 'fr-FR', 0.8);
-  await pause(400);
-  await speak(ar, 'ar-SA', 0.95);
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const hint = document.getElementById('fileNameHint');
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const added = importLines(e.target.result);
+        if (added > 0) {
+            saveWords();
+            renderList();
+            hint.textContent = `✅ تم استيراد ${added} كلمة من "${file.name}" — عندك دلوقتي ${words.length} كلمة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
+            hint.style.color = 'var(--mint)';
+        } else {
+            hint.textContent = `مفيش كلمات صالحة في "${file.name}". تأكد من الشكل: bonjour - صباح الخير`;
+            hint.style.color = '#fb7185';
+        }
+        event.target.value = '';
+    };
+    reader.onerror = function () {
+        hint.textContent = 'حصل خطأ في قراءة الملف، جرب تاني';
+        hint.style.color = '#fb7185';
+    };
+    reader.readAsText(file, 'UTF-8');
 }
-function pause(ms){ return new Promise(r=>setTimeout(r, ms)); }
-
-/* ---------- Add / Import ---------- */
-function addSingleWord(){
-  const fr = document.getElementById('inputFr').value.trim();
-  const ar = document.getElementById('inputAr').value.trim();
-  if(!fr || !ar) return;
-  words.push({id:Date.now()+Math.random(), fr, ar});
-  document.getElementById('inputFr').value='';
-  document.getElementById('inputAr').value='';
-  saveWords();
-  speakBoth(fr, ar);
-  const hint = document.getElementById('addHint');
-  hint.style.color = 'var(--mint)';
-  hint.textContent = `✅ ضفت "${fr}" — عندك دلوقتي ${words.length} كلمة. ممكن تضيف كذا كلمة ورا بعض، وتروح "كلماتي" أو "حفظ" من تحت لما تحب.`;
-  renderList();
-}
-function bulkImport(){
-  const raw = document.getElementById('bulkInput').value;
-  const added = importLines(raw);
-  const hint = document.getElementById('bulkHint');
-  if(added>0){
-    document.getElementById('bulkInput').value='';
+function deleteWord(id) {
+    words = words.filter(w => w.id !== id);
     saveWords();
     renderList();
-    hint.style.color = 'var(--mint)';
-    hint.textContent = `✅ ضفت ${added} كلمة. عندك دلوقتي ${words.length} كلمة محفوظة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
-  } else {
-    hint.style.color = '#fb7185';
-    hint.textContent = 'مفيش كلمات صالحة. اتأكد إن كل سطر بالشكل: bonjour - صباح الخير';
-  }
-}
-function importLines(raw){
-  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
-  let added = 0;
-  lines.forEach((line, i)=>{
-    const parts = line.split(/[-:،,]/);
-    if(parts.length>=2){
-      const fr = parts[0].trim();
-      const ar = parts.slice(1).join(' ').trim();
-      if(fr && ar){ words.push({id:Date.now()+Math.random()+i, fr, ar}); added++; }
-    }
-  });
-  return added;
-}
-function handleFileUpload(event){
-  const file = event.target.files[0];
-  if(!file) return;
-  const hint = document.getElementById('fileNameHint');
-  const reader = new FileReader();
-  reader.onload = function(e){
-    const added = importLines(e.target.result);
-    if(added>0){
-      saveWords();
-      renderList();
-      hint.textContent = `✅ تم استيراد ${added} كلمة من "${file.name}" — عندك دلوقتي ${words.length} كلمة. روح "كلماتي" أو "حفظ" من تحت لما تحب.`;
-      hint.style.color = 'var(--mint)';
-    } else {
-      hint.textContent = `مفيش كلمات صالحة في "${file.name}". تأكد من الشكل: bonjour - صباح الخير`;
-      hint.style.color = '#fb7185';
-    }
-    event.target.value = '';
-  };
-  reader.onerror = function(){
-    hint.textContent = 'حصل خطأ في قراءة الملف، جرب تاني';
-    hint.style.color = '#fb7185';
-  };
-  reader.readAsText(file, 'UTF-8');
-}
-function deleteWord(id){
-  words = words.filter(w=>w.id!==id);
-  saveWords();
-  renderList();
 }
 
-/* ---------- List rendering ---------- */
-function renderList(){
-  const container = document.getElementById('listContainer');
-  document.getElementById('listCount').textContent = words.length + ' كلمة محفوظة';
-  if(words.length===0){
-    container.innerHTML = '<div class="empty"><span class="emoji">📝</span>لسه مفيش كلمات...<br>روح لتاب "إضافة" وضيف أول كلمة!</div>';
-    return;
-  }
-  container.innerHTML = words.map(w=>`
+/* ========== List rendering ========== */
+function renderList() {
+    const container = document.getElementById('listContainer');
+    document.getElementById('listCount').textContent = words.length + ' كلمة محفوظة';
+    if (words.length === 0) {
+        container.innerHTML = '<div class="empty"><span class="emoji">📝</span>لسه مفيش كلمات...<br>روح لتاب "إضافة" وضيف أول كلمة!</div>';
+        return;
+    }
+    container.innerHTML = words.map(w => `
     <div class="card">
       <div class="card-actions">
         <button class="icon-btn" onclick="speakBoth('${escAttr(w.fr)}','${escAttr(w.ar)}')">🔊</button>
@@ -427,131 +517,131 @@ function renderList(){
     </div>
   `).join('');
 }
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escAttr(s) { return s.replace(/'/g, "\'").replace(/"/g, '&quot;'); }
 
-/* ---------- Memorize mode ---------- */
-function toggleLoop(){
-  memLoop = !memLoop;
-  document.getElementById('loopSwitch').classList.toggle('on', memLoop);
+/* ========== Memorize mode ========== */
+function toggleLoop() {
+    memLoop = !memLoop;
+    document.getElementById('loopSwitch').classList.toggle('on', memLoop);
 }
-async function toggleMemPlay(){
-  if(memPlaying){ pauseMem(); return; }
-  if(words.length===0){ switchTab('add'); return; }
-  memPlaying = true; memStopFlag = false;
-  document.getElementById('memPlayBtn').textContent = '⏸️ وقف مؤقت';
-  await runMemLoop();
+async function toggleMemPlay() {
+    if (memPlaying) { pauseMem(); return; }
+    if (words.length === 0) { switchTab('add'); return; }
+    memPlaying = true; memStopFlag = false;
+    document.getElementById('memPlayBtn').textContent = '⏸️ وقف مؤقت';
+    await runMemLoop();
 }
-function pauseMem(){
-  memPlaying = false; memStopFlag = true;
-  speechSynthesis.cancel();
-  document.getElementById('memPlayBtn').textContent = '▶️ كمّل';
+function pauseMem() {
+    memPlaying = false; memStopFlag = true;
+    stopSpeech();
+    document.getElementById('memPlayBtn').textContent = '▶️ كمّل';
 }
-function stopMem(){
-  memPlaying = false; memStopFlag = true; memIndex = 0;
-  speechSynthesis.cancel();
-  document.getElementById('memPlayBtn').textContent = '▶️ ابدأ الحفظ';
-  document.getElementById('memStage').innerHTML = '<div class="placeholder">دوس "ابدأ" وهسمعك كل الكلمات بالفرنساوي وبعدها بالعربي 🎧</div>';
+function stopMem() {
+    memPlaying = false; memStopFlag = true; memIndex = 0;
+    stopSpeech();
+    document.getElementById('memPlayBtn').textContent = '▶️ ابدأ الحفظ';
+    document.getElementById('memStage').innerHTML = '<div class="placeholder">دوس "ابدأ" وهسمعك كل الكلمات بالفرنساوي وبعدها بالعربي 🎧</div>';
 }
-async function runMemLoop(){
-  while(memIndex < words.length){
-    if(memStopFlag) return;
-    const w = words[memIndex];
-    document.getElementById('memStage').innerHTML = `
-      <div class="progress">${memIndex+1} من ${words.length}</div>
+async function runMemLoop() {
+    while (memIndex < words.length) {
+        if (memStopFlag) return;
+        const w = words[memIndex];
+        document.getElementById('memStage').innerHTML = `
+      <div class="progress">${memIndex + 1} من ${words.length}</div>
       <div class="fr">${esc(w.fr)}</div>
       <div class="ar">${esc(w.ar)}</div>`;
-    await speak(w.fr, 'fr-FR', 0.8);
-    if(memStopFlag) return;
-    await pause(450);
-    await speak(w.ar, 'ar-SA', 0.95);
-    if(memStopFlag) return;
-    await pause(900);
-    memIndex++;
-  }
-  if(memLoop && !memStopFlag){
-    memIndex = 0;
-    await runMemLoop();
-  } else {
-    memPlaying = false;
-    document.getElementById('memPlayBtn').textContent = '▶️ ابدأ من الأول';
-    memIndex = 0;
-  }
+        await speak(w.fr, 'fr', 0.85);
+        if (memStopFlag) return;
+        await pause(500);
+        await speak(w.ar, 'ar', 0.95);
+        if (memStopFlag) return;
+        await pause(900);
+        memIndex++;
+    }
+    if (memLoop && !memStopFlag) {
+        memIndex = 0;
+        await runMemLoop();
+    } else {
+        memPlaying = false;
+        document.getElementById('memPlayBtn').textContent = '▶️ ابدأ من الأول';
+        memIndex = 0;
+    }
 }
 
-/* ---------- Quiz mode ---------- */
-function shuffle(arr){
-  const a = arr.slice();
-  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a;
+/* ========== Quiz mode ========== */
+function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
 }
-function startQuiz(){
-  quizDeck = shuffle(words);
-  quizIndex = 0; quizFlipped = false; quizScoreKnown = 0;
-  renderQuizCard();
+function startQuiz() {
+    quizDeck = shuffle(words);
+    quizIndex = 0; quizFlipped = false; quizScoreKnown = 0;
+    renderQuizCard();
 }
-function toggleQuizDirection(){
-  quizDirFrToAr = !quizDirFrToAr;
-  document.getElementById('quizDirBtn').textContent = quizDirFrToAr ? '🔁 فرنساوي → عربي' : '🔁 عربي → فرنساوي';
-  quizFlipped = false;
-  renderQuizCard();
+function toggleQuizDirection() {
+    quizDirFrToAr = !quizDirFrToAr;
+    document.getElementById('quizDirBtn').textContent = quizDirFrToAr ? '🔁 فرنساوي → عربي' : '🔁 عربي → فرنساوي';
+    quizFlipped = false;
+    renderQuizCard();
 }
-function renderQuizCard(){
-  const total = quizDeck.length;
-  document.getElementById('quizProgress').textContent = (total===0 ? '0' : Math.min(quizIndex+1,total)) + ' / ' + total;
-  const card = document.getElementById('flashcard');
-  const face = document.getElementById('flashFace');
-  const sub = document.getElementById('flashSub');
-  if(total===0){
-    face.textContent = 'ضيف كلمات الأول';
-    sub.textContent = '';
-    return;
-  }
-  if(quizIndex>=total){
-    face.innerHTML = `خلصت! 🎉<br><span style="font-size:14px; color:var(--text-dim)">عرفت ${quizScoreKnown} من ${total}</span>`;
-    sub.textContent = '';
-    return;
-  }
-  const w = quizDeck[quizIndex];
-  const frontWord = quizDirFrToAr ? w.fr : w.ar;
-  const frontLang = quizDirFrToAr ? 'fr' : 'ar';
-  sub.textContent = quizFlipped ? 'الإجابة' : 'السؤال';
-  face.className = 'face ' + (frontLang==='fr' && !quizFlipped ? 'fr' : (frontLang==='ar' && quizFlipped ? 'fr' : ''));
-  if(!quizFlipped){
-    face.textContent = frontWord;
-    face.className = 'face' + (quizDirFrToAr ? ' fr' : '');
-  } else {
-    const answer = quizDirFrToAr ? w.ar : w.fr;
-    face.textContent = answer;
-    face.className = 'face' + (!quizDirFrToAr ? ' fr' : '');
-  }
+function renderQuizCard() {
+    const total = quizDeck.length;
+    document.getElementById('quizProgress').textContent = (total === 0 ? '0' : Math.min(quizIndex + 1, total)) + ' / ' + total;
+    const card = document.getElementById('flashcard');
+    const face = document.getElementById('flashFace');
+    const sub = document.getElementById('flashSub');
+    if (total === 0) {
+        face.textContent = 'ضيف كلمات الأول';
+        sub.textContent = '';
+        return;
+    }
+    if (quizIndex >= total) {
+        face.innerHTML = `خلصت! 🎉<br><span style="font-size:14px; color:var(--text-dim)">عرفت ${quizScoreKnown} من ${total}</span>`;
+        sub.textContent = '';
+        return;
+    }
+    const w = quizDeck[quizIndex];
+    const frontWord = quizDirFrToAr ? w.fr : w.ar;
+    const frontLang = quizDirFrToAr ? 'fr' : 'ar';
+    sub.textContent = quizFlipped ? 'الإجابة' : 'السؤال';
+    face.className = 'face' + (frontLang === 'fr' && !quizFlipped ? ' fr' : (frontLang === 'ar' && quizFlipped ? ' fr' : ''));
+    if (!quizFlipped) {
+        face.textContent = frontWord;
+        face.className = 'face' + (quizDirFrToAr ? ' fr' : '');
+    } else {
+        const answer = quizDirFrToAr ? w.ar : w.fr;
+        face.textContent = answer;
+        face.className = 'face' + (!quizDirFrToAr ? ' fr' : '');
+    }
 }
-function flipCard(){
-  if(quizDeck.length===0 || quizIndex>=quizDeck.length) return;
-  quizFlipped = !quizFlipped;
-  renderQuizCard();
-  const w = quizDeck[quizIndex];
-  if(quizFlipped){
-    const lang = quizDirFrToAr ? 'ar-SA' : 'fr-FR';
-    const text = quizDirFrToAr ? w.ar : w.fr;
-    speak(text, lang);
-  } else {
-    const lang = quizDirFrToAr ? 'fr-FR' : 'ar-SA';
-    const text = quizDirFrToAr ? w.fr : w.ar;
-    speak(text, lang);
-  }
+function flipCard() {
+    if (quizDeck.length === 0 || quizIndex >= quizDeck.length) return;
+    quizFlipped = !quizFlipped;
+    renderQuizCard();
+    const w = quizDeck[quizIndex];
+    if (quizFlipped) {
+        const lang = quizDirFrToAr ? 'ar' : 'fr';
+        const text = quizDirFrToAr ? w.ar : w.fr;
+        speak(text, lang);
+    } else {
+        const lang = quizDirFrToAr ? 'fr' : 'ar';
+        const text = quizDirFrToAr ? w.fr : w.ar;
+        speak(text, lang);
+    }
 }
-function quizAnswer(knew){
-  if(quizDeck.length===0 || quizIndex>=quizDeck.length) return;
-  if(knew) quizScoreKnown++;
-  quizIndex++;
-  quizFlipped = false;
-  renderQuizCard();
+function quizAnswer(knew) {
+    if (quizDeck.length === 0 || quizIndex >= quizDeck.length) return;
+    if (knew) quizScoreKnown++;
+    quizIndex++;
+    quizFlipped = false;
+    renderQuizCard();
 }
 
-/* ---------- Init ---------- */
+/* ========== Init ========== */
 loadWords();
 switchTab('add');
 </script>
 </body>
-</html>
+                </html>
